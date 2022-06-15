@@ -19,7 +19,7 @@ func record() {
 					continue
 				}
 				tempAuthor := Author{}
-				DB.Model(&Author{}).Order("name").Where("name = ?", author).Find(&tempAuthor)
+				DB.Model(&Author{}).Where("name = ?", author).Find(&tempAuthor)
 				if tempAuthor.ID == 0 {
 					tempAuthor.Name = author
 					tempAuthor.ArticleCount = 1

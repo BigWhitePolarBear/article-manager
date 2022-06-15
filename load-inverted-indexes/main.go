@@ -5,14 +5,11 @@ import (
 	"sync"
 )
 
-type variable struct {
-	Key   string
-	Value string
-}
-
 var (
-	wg                        sync.WaitGroup
-	articleCount, authorCount int64
+	wg sync.WaitGroup
+
+	articleCount int64
+	authorCount  int64
 )
 
 func main() {
@@ -26,6 +23,7 @@ func main() {
 	wg.Add(2)
 
 	go articleLoader()
+	go authorLoader()
 
 	wg.Wait()
 }

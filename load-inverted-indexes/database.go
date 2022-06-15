@@ -8,7 +8,6 @@ import (
 
 var (
 	DB               *gorm.DB
-	CommonRDB        *redis.Client
 	WordToArticleRDB *redis.Client
 	WordToAuthorRDB  *redis.Client
 )

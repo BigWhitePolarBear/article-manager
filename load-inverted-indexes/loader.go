@@ -71,7 +71,7 @@ func articleLoader() {
 		}
 
 		for i := range indexes {
-			id, err := strconv.ParseUint(indexes[i], 16, 64)
+			id, err = strconv.ParseUint(indexes[i], 16, 64)
 			if err != nil {
 				log.Println(err)
 				continue
@@ -80,6 +80,8 @@ func articleLoader() {
 		}
 
 		DB.Model(&WordToArticle{}).Create(&WordToArticle{Word: word, Indexes: s.serialize()})
+
+		WordToArticleRDB.Del(context.Background(), word)
 	}
 
 	// Storage bloom filter into database
@@ -94,4 +96,80 @@ func articleLoader() {
 		panic(err)
 	}
 	DB.Table("variables").Create(variable{"ArticleWordFilter", string(filterJson)})
+}
+
+func authorLoader() {
+	defer wg.Done()
+
+	authorIDFilter := bloom.NewWithEstimates(1e7, 0.01)
+	authorWordFilter := bloom.NewWithEstimates(1e7, 0.01)
+
+	rows, err := DB.Table("authors").Select("id", "name").Rows()
+	if err != nil {
+		panic(err)
+	}
+
+	var (
+		id   uint64
+		name string
+	)
+	for rows.Next() {
+		err = rows.Scan(&id, &name)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		authorIDFilter.AddString(strconv.FormatUint(id, 16))
+		words := tokenize.TextToWords(name)
+		for _, word := range words {
+			if len(word) == 1 {
+				continue
+			} else {
+				word = strings.ToLower(word)
+				authorWordFilter.AddString(word)
+				WordToAuthorRDB.SAdd(context.Background(), word, id)
+			}
+		}
+	}
+
+	// Get all words and their indexes
+	keys, err := WordToAuthorRDB.Keys(context.Background(), "*").Result()
+	if err != nil {
+		panic(err)
+	}
+
+	for _, word := range keys {
+		s := set{}
+		indexes, err := WordToAuthorRDB.SMembers(context.Background(), word).Result()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		for i := range indexes {
+			id, err = strconv.ParseUint(indexes[i], 16, 64)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			s.put(id)
+		}
+
+		DB.Model(&WordToAuthor{}).Create(&WordToAuthor{Word: word, Indexes: s.serialize()})
+
+		WordToAuthorRDB.Del(context.Background(), word)
+	}
+
+	// Storage bloom filter into database
+	filterJson, err := authorIDFilter.MarshalJSON()
+	if err != nil {
+		panic(err)
+	}
+	DB.Table("variables").Create(variable{"AuthorIDFilter", string(filterJson)})
+
+	filterJson, err = authorWordFilter.MarshalJSON()
+	if err != nil {
+		panic(err)
+	}
+	DB.Table("variables").Create(variable{"AuthorWordFilter", string(filterJson)})
 }
