@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strconv"
 	"strings"
 )
 
@@ -10,11 +9,11 @@ func record() {
 
 	for {
 		select {
-		case article := <-match2record:
-			authors := strings.Split(article.Authors, ", ")
-			article.Authors = ""
+		case article := <-articleMatch2Record:
+			_authors := <-authorsMatch2Record
+			authors := strings.Split(_authors, ", ")
 			DB.Model(Article{}).Create(&article)
-			authorBuilder := strings.Builder{}
+
 			for _, author := range authors {
 				if author == "" {
 					continue
@@ -23,21 +22,15 @@ func record() {
 				DB.Model(&Author{}).Order("name").Where("name = ?", author).Find(&tempAuthor)
 				if tempAuthor.ID == 0 {
 					tempAuthor.Name = author
-					tempAuthor.Articles = strconv.FormatUint(article.ID, 10)
 					tempAuthor.ArticleCount = 1
 					DB.Model(&Author{}).Create(&tempAuthor)
 				} else {
-					tempAuthor.Articles += " " + strconv.FormatUint(article.ID, 10)
 					tempAuthor.ArticleCount++
-					DB.Model(&Author{}).Where("id = ?", tempAuthor.ID).Save(&tempAuthor)
+					DB.Model(&Author{}).Where("id = ?", tempAuthor.ID).Update("article_count", tempAuthor.ArticleCount)
 				}
-
-				// Save the authors' id instead of name
-				authorBuilder.WriteString(strconv.FormatUint(tempAuthor.ID, 10))
-				authorBuilder.WriteByte(' ')
+				DB.Model(&ArticleToAuthor{}).Create(ArticleToAuthor{ArticleID: article.ID, AuthorID: tempAuthor.ID})
+				DB.Model(&AuthorToArticle{}).Create(AuthorToArticle{AuthorID: tempAuthor.ID, ArticleID: article.ID})
 			}
-			article.Authors = authorBuilder.String()
-			DB.Model(&Article{}).Where("id = ?", article.ID).Update("authors", article.Authors)
 
 		case <-matchOK:
 			return

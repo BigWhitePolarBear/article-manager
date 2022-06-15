@@ -10,7 +10,7 @@ import (
 func read() {
 	defer wg.Done()
 
-	f, err := os.Open("./dblp.xml")
+	f, err := os.Open("/project/article-manager/load-data/dblp.xml")
 	if err != nil {
 		panic(err)
 	}

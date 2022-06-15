@@ -1,10 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
-	"time"
 )
 
 var (
@@ -47,28 +46,24 @@ func repairName(name string) string {
 func match() {
 	defer wg.Done()
 	// Tags for speeding up regexp matches.
-	//inArticle, inAuthor, inEE, authorDone, titleDone, journalDone, volumeDone, yearDone, eeDone :=
-	//	false, false, false, false, false, false, false, false, false
+	inArticle, inAuthor, inEE, authorDone, titleDone, bookDone, journalDone, volumeDone, pagesDone, yearDone, eeDone :=
+		false, false, false, false, false, false, false, false, false, false, false
+
 	article := Article{}
+	authors := ""
 
-	var articleCnt, rowCnt uint64
-
-	inArticle, titleDone := false, false
 Loop:
 	for {
-		if time.Now().UnixMilli()&63 == 0 {
-			fmt.Printf("\r %d    %d", rowCnt, articleCnt)
-		}
 		select {
 		case line := <-read2match:
-			rowCnt++
 			if inArticle && (reBookEnd.Match(line) || reArticleEnd.Match(line) ||
 				reProceedingEnd.Match(line) || reCollectionEnd.Match(line)) {
 				inArticle = false
 				if article.Title == "" {
 					continue Loop
 				}
-				articleCnt++
+				articleMatch2Record <- article
+				authorsMatch2Record <- authors
 				continue Loop
 			}
 
@@ -76,11 +71,30 @@ Loop:
 				reProceeding.Match(line) || reCollection.Match(line)) {
 				inArticle = true
 				article = Article{}
-				titleDone = false
+				authors = ""
+				authorDone, titleDone, bookDone, journalDone, volumeDone, pagesDone, yearDone, eeDone =
+					false, false, false, false, false, false, false, false
 				continue Loop
 			}
 
 			if inArticle {
+				if !authorDone {
+					temp := reAuthor.FindSubmatch(line)
+					if temp != nil {
+						inAuthor = true
+						name := temp[1]
+						t := repairName(string(name))
+						if authors == "" {
+							authors = t
+						} else {
+							authors += ", " + t
+						}
+						continue Loop
+					} else if inAuthor {
+						inAuthor = false
+						authorDone = true
+					}
+				}
 				if !titleDone {
 					temp := reTitle.FindSubmatch(line)
 					if temp != nil {
@@ -90,120 +104,96 @@ Loop:
 						continue Loop
 					}
 				}
+				if !bookDone {
+					temp := reBookTitle.FindSubmatch(line)
+					if temp != nil {
+						bookTitle := string(temp[1])
+						if len(bookTitle) == 0 {
+							continue Loop
+						}
+						var id uint64
+						DB.Model(&Book{}).Select("id").Where("name = ?", bookTitle).Find(&id)
+						if id == 0 {
+							newBook := Book{Name: bookTitle}
+							DB.Model(&Book{}).Create(&newBook)
+							article.BookID = &newBook.ID
+						} else {
+							article.BookID = &id
+						}
+						bookDone = true
+						continue Loop
+					}
+				}
+				if !journalDone {
+					temp := reJournal.FindSubmatch(line)
+					if temp != nil {
+						journal := string(temp[1])
+						if len(journal) == 0 {
+							continue Loop
+						}
+						var id uint64
+						DB.Model(&Journal{}).Select("id").Where("name = ?", journal).Find(&id)
+						if id == 0 {
+							newJournal := Journal{Name: journal}
+							DB.Model(&Journal{}).Create(&newJournal)
+							article.JournalID = &newJournal.ID
+						} else {
+							article.JournalID = &id
+						}
+						journalDone = true
+						continue Loop
+					}
+				}
+				if !volumeDone {
+					temp := reVolume.FindSubmatch(line)
+					if temp != nil {
+						volume := temp[1]
+						article.Volume = string(volume)
+						volumeDone = true
+						continue Loop
+					}
+				}
+				if !pagesDone {
+					temp := rePages.FindSubmatch(line)
+					if temp != nil {
+						pages := temp[1]
+						article.Pages = string(pages)
+						pagesDone = true
+						continue Loop
+					}
+				}
+				if !yearDone {
+					temp := reYear.FindSubmatch(line)
+					if temp != nil {
+						year := temp[1]
+						t, _ := strconv.ParseUint(string(year), 10, 16)
+						if t == 0 {
+							continue
+						}
+						t_ := uint16(t)
+						article.Year = &t_
+						yearDone = true
+						continue Loop
+					}
+				}
+				if !eeDone {
+					temp := reEE.FindSubmatch(line)
+					if temp != nil {
+						inEE = true
+						ee := temp[1]
+						if article.EE == "" {
+							article.EE = string(ee)
+						} else {
+							article.EE += ", " + string(ee)
+						}
+					} else if inEE {
+						inEE = false
+						eeDone = true
+					}
+				}
 			}
 		case <-readOK:
 			matchOK <- struct{}{}
 		}
 	}
-	//Loop:
-	//	for {
-	//		select {
-	//		case line := <-read2match:
-	//			if inArticle && (reBookEnd.Match(line) || reArticleEnd.Match(line)) {
-	//				inArticle = false
-	//				if article.Title == "" {
-	//					continue Loop
-	//				}
-	//				match2record <- article
-	//              continue Loop
-	//			}
-	//
-	//			if !inArticle && (reBook.Match(line) || reArticle.Match(line)) {
-	//				inArticle = true
-	//				article = Article{}
-	//				authorDone, titleDone, journalDone, volumeDone, yearDone, eeDone =
-	//					false, false, false, false, false, false
-	//				continue Loop
-	//			}
-	//
-	//			if inArticle {
-	//				if !authorDone {
-	//					temp := reAuthor.FindSubmatch(line)
-	//					if temp != nil {
-	//						inAuthor = true
-	//						name := temp[1]
-	//						t := repairName(string(name))
-	//						if article.Authors == "" {
-	//							article.Authors = t
-	//						} else {
-	//							article.Authors += ", " + t
-	//						}
-	//						continue Loop
-	//					} else if inAuthor {
-	//						inAuthor = false
-	//						authorDone = true
-	//					}
-	//				}
-	//				if !titleDone {
-	//					temp := reTitle.FindSubmatch(line)
-	//					if temp != nil {
-	//						title := temp[1]
-	//						article.Title = string(title)
-	//						titleDone = true
-	//						continue Loop
-	//					}
-	//				}
-	//				if !journalDone {
-	//					temp := reJournal.FindSubmatch(line)
-	//					if temp != nil {
-	//						journal := string(temp[1])
-	//						if len(journal) == 0 {
-	//							continue Loop
-	//						}
-	//						var id uint64
-	//						DB.Model(&Journal{}).Select("id").Where("name = ?", journal).Find(&id)
-	//						if id == 0 {
-	//							newJournal := Journal{Name: journal}
-	//							DB.Model(&Journal{}).Create(&newJournal)
-	//							article.JournalID = &newJournal.ID
-	//						} else {
-	//							article.JournalID = &id
-	//						}
-	//						journalDone = true
-	//						continue Loop
-	//					}
-	//				}
-	//				if !volumeDone {
-	//					temp := reVolume.FindSubmatch(line)
-	//					if temp != nil {
-	//						volume := temp[1]
-	//						article.Volume = string(volume)
-	//						volumeDone = true
-	//						continue Loop
-	//					}
-	//				}
-	//				if !yearDone {
-	//					temp := reYear.FindSubmatch(line)
-	//					if temp != nil {
-	//						year := temp[1]
-	//						t, _ := strconv.ParseUint(string(year), 10, 16)
-	//						if t == 0 {
-	//							continue
-	//						}
-	//						t_ := uint16(t)
-	//						article.Year = &t_
-	//						yearDone = true
-	//						continue Loop
-	//					}
-	//				}
-	//				if !eeDone {
-	//					temp := reEE.FindSubmatch(line)
-	//					if temp != nil {
-	//						inEE = true
-	//						ee := temp[1]
-	//						if article.EE == "" {
-	//							article.EE = string(ee)
-	//						} else {
-	//							article.EE += ", " + string(ee)
-	//						}
-	//					} else if inEE {
-	//						inEE = false
-	//						eeDone = true
-	//					}
-	//				}
-	//			}
-	//		case <-readOK:
-	//			matchOK <- struct{}{}
-	//		}
-	//	}
 }

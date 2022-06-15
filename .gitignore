@@ -1,2 +1,5 @@
 *.exe
 *.xml
+
+load-data
+load-inverted-indexes
