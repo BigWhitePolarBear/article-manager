@@ -1,12 +1,15 @@
 package main
 
 import (
+	"github.com/sajari/fuzzy"
 	"strconv"
 	"sync"
 )
 
 var (
 	wg sync.WaitGroup
+
+	spellChecker *fuzzy.Model
 
 	articleCount int64
 	authorCount  int64
@@ -21,6 +24,10 @@ func main() {
 	DB.Table("variables").Create(variable{Key: "AuthorCounts", Value: strconv.FormatInt(authorCount, 16)})
 
 	wg.Add(2)
+
+	spellChecker = fuzzy.NewModel()
+	spellChecker.SetDepth(2)
+	spellChecker.Train(SampleEnglish())
 
 	go articleLoader()
 	go authorLoader()

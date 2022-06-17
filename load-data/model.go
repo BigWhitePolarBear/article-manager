@@ -7,7 +7,7 @@ import (
 type Article struct {
 	ID        uint64         `gorm:"primaryKey"`
 	DeletedAt gorm.DeletedAt `gorm:"index"`
-	Title     string         `gorm:"type:text not null"`
+	Title     string         `gorm:"type:varchar(1500) not null"`
 	Book      Book
 	BookID    *uint64
 	Journal   Journal
@@ -15,7 +15,7 @@ type Article struct {
 	Volume    string `gorm:"type:varchar(50)"`
 	Pages     string `gorm:"type:varchar(50)"`
 	Year      *uint16
-	EE        string `gorm:"type:text"`
+	EE        string `gorm:"type:varchar(500)"`
 }
 
 type Author struct {

@@ -194,6 +194,7 @@ Loop:
 			}
 		case <-readOK:
 			matchOK <- struct{}{}
+			return
 		}
 	}
 }

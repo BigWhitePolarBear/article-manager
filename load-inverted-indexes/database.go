@@ -21,7 +21,7 @@ const (
 func init() {
 	var err error
 	DB, err = gorm.Open(mysql.Open("root:zxc05020519@tcp(localhost:3306)/"+
-		"article_search_server?charset=utf8mb4&interpolateParams=true&parseTime=True&loc=Local"),
+		"article_manager?charset=utf8mb4&interpolateParams=true&parseTime=True&loc=Local"),
 		&gorm.Config{
 			PrepareStmt:            true,
 			SkipDefaultTransaction: true,

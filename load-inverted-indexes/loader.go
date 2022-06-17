@@ -1,13 +1,47 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"fmt"
 	"github.com/bits-and-blooms/bloom/v3"
 	"github.com/jdkato/prose/tokenize"
+	"github.com/jinzhu/inflection"
 	"log"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
 )
+
+func SampleEnglish() []string {
+	var out []string
+	file, err := os.Open("/project/article-manager/data/fuzzy/big.txt")
+	if err != nil {
+		fmt.Println(err)
+		return out
+	}
+	reader := bufio.NewReader(file)
+	scanner := bufio.NewScanner(reader)
+	scanner.Split(bufio.ScanLines)
+	// Count the words.
+	count := 0
+	for scanner.Scan() {
+		exp, _ := regexp.Compile("[a-zA-Z]+")
+		words := exp.FindAll([]byte(scanner.Text()), -1)
+		for _, word := range words {
+			if len(word) > 1 {
+				out = append(out, strings.ToLower(string(word)))
+				count++
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "reading input:", err)
+	}
+
+	return out
+}
 
 func articleLoader() {
 	defer wg.Done()
@@ -36,7 +70,7 @@ func articleLoader() {
 			if len(word) == 1 {
 				continue
 			} else if len(word) == 2 && (word == "of" || word == "to" || word == "it" ||
-				word == "as" || word == "or" || word == "in") {
+				word == "as" || word == "or" || word == "in" || word == "on") {
 				continue
 			} else if len(word) == 3 && (word == "and" || word == "for" || word == "its") {
 				continue
@@ -50,8 +84,13 @@ func articleLoader() {
 				continue
 			} else {
 				word = strings.ToLower(word)
+				t := spellChecker.SpellCheck(word)
+				if len(t) != 0 {
+					word = t
+				}
+				word = inflection.Singular(word)
 				articleWordFilter.AddString(word)
-				WordToArticleRDB.SAdd(context.Background(), word, id)
+				WordToArticleRDB.HIncrBy(context.Background(), word, strconv.FormatUint(id, 16), 1)
 			}
 		}
 	}
@@ -63,8 +102,8 @@ func articleLoader() {
 	}
 
 	for _, word := range keys {
-		s := set{}
-		indexes, err := WordToArticleRDB.SMembers(context.Background(), word).Result()
+		index := InvertedIndex{}
+		indexes, err := WordToArticleRDB.HKeys(context.Background(), word).Result()
 		if err != nil {
 			log.Println(err)
 			continue
@@ -76,10 +115,20 @@ func articleLoader() {
 				log.Println(err)
 				continue
 			}
-			s.put(id)
+			_cnt, err := WordToArticleRDB.HGet(context.Background(), word, indexes[i]).Result()
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			cnt, err := strconv.Atoi(_cnt)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			index[id] = cnt
 		}
 
-		DB.Model(&WordToArticle{}).Create(&WordToArticle{Word: word, Indexes: s.serialize()})
+		DB.Model(&WordToArticle{}).Create(&WordToArticle{Word: word, Indexes: index.Serialize()})
 
 		WordToArticleRDB.Del(context.Background(), word)
 	}
@@ -126,8 +175,12 @@ func authorLoader() {
 				continue
 			} else {
 				word = strings.ToLower(word)
+				t := spellChecker.SpellCheck(word)
+				if len(t) != 0 {
+					word = t
+				}
 				authorWordFilter.AddString(word)
-				WordToAuthorRDB.SAdd(context.Background(), word, id)
+				WordToAuthorRDB.HIncrBy(context.Background(), word, strconv.FormatUint(id, 16), 1)
 			}
 		}
 	}
@@ -139,8 +192,8 @@ func authorLoader() {
 	}
 
 	for _, word := range keys {
-		s := set{}
-		indexes, err := WordToAuthorRDB.SMembers(context.Background(), word).Result()
+		index := InvertedIndex{}
+		indexes, err := WordToAuthorRDB.HKeys(context.Background(), word).Result()
 		if err != nil {
 			log.Println(err)
 			continue
@@ -152,10 +205,20 @@ func authorLoader() {
 				log.Println(err)
 				continue
 			}
-			s.put(id)
+			_cnt, err := WordToAuthorRDB.HGet(context.Background(), word, indexes[i]).Result()
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			cnt, err := strconv.Atoi(_cnt)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			index[id] = cnt
 		}
 
-		DB.Model(&WordToAuthor{}).Create(&WordToAuthor{Word: word, Indexes: s.serialize()})
+		DB.Model(&WordToAuthor{}).Create(&WordToAuthor{Word: word, Indexes: index.Serialize()})
 
 		WordToAuthorRDB.Del(context.Background(), word)
 	}

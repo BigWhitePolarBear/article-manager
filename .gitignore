@@ -2,4 +2,4 @@
 *.xml
 
 load-data
-load-inverted-indexes
+load-inverted-indexes/load-inverted-indexes
