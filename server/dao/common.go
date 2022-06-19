@@ -8,4 +8,12 @@ import (
 
 var (
 	json = jsoniter.ConfigCompatibleWithStandardLibrary
+
+	articleCount int64
+	authorCount  int64
 )
+
+func init() {
+	DB.Table("articles").Count(&articleCount)
+	DB.Table("authors").Count(&authorCount)
+}

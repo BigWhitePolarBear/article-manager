@@ -6,6 +6,7 @@ import (
 	"gorm.io/gorm"
 	"log"
 	"strconv"
+	"sync/atomic"
 	"time"
 )
 
@@ -59,6 +60,8 @@ func (a *Article) AfterFind(tx *gorm.DB) (err error) {
 // AfterCreate write into cache after creation
 func (a *Article) AfterCreate(tx *gorm.DB) (err error) {
 	a.saveIntoCache()
+
+	atomic.AddInt64(&authorCount, 1)
 
 	return nil
 }

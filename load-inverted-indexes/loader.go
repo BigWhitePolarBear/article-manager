@@ -49,7 +49,8 @@ func articleLoader() {
 	articleIDFilter := bloom.NewWithEstimates(1e7, 0.1)
 	articleWordFilter := bloom.NewWithEstimates(1e7, 0.1)
 
-	for i := 1; i <= 2423332; i++ {
+	var i uint64 = 1
+	for ; i <= 2423332; i++ {
 		receiver := struct {
 			Id    uint64
 			Title string
@@ -60,11 +61,13 @@ func articleLoader() {
 			continue
 		}
 		articleIDFilter.AddString(strconv.FormatUint(receiver.Id, 16))
+
 		words := tokenize.TextToWords(receiver.Title)
+		var wordCnt uint64
 		for _, word := range words {
 			for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' ||
 				word[0] == '`' || word[0] == '*' || word[0] == '+' || word[0] == '=' || word[0] == '^' ||
-				word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|') {
+				word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|' || word[0] == '~') {
 				word = word[1:]
 			}
 			if len(word) == 0 || len(word) == 1 {
@@ -83,6 +86,7 @@ func articleLoader() {
 			} else if len(word) == 6 && (word == "across" || word == "inside") {
 				continue
 			} else {
+				wordCnt++
 				word = strings.ToLower(word)
 				t := spellChecker.SpellCheck(word)
 				if len(t) != 0 {
@@ -92,6 +96,10 @@ func articleLoader() {
 				articleWordFilter.AddString(word)
 				WordToArticleRDB.HIncrBy(context.Background(), word, strconv.FormatUint(receiver.Id, 16), 1)
 			}
+		}
+		err = DB.Model(&ArticleWordCount{}).Create(&ArticleWordCount{ID: i, Count: wordCnt}).Error
+		if err != nil {
+			log.Println(err)
 		}
 	}
 
@@ -153,7 +161,8 @@ func authorLoader() {
 	authorIDFilter := bloom.NewWithEstimates(1e7, 0.1)
 	authorWordFilter := bloom.NewWithEstimates(1e7, 0.1)
 
-	for i := 1; i <= 1540683; i++ {
+	var i uint64 = 1
+	for ; i <= 1540683; i++ {
 		receiver := struct {
 			Id   uint64
 			Name string
@@ -164,16 +173,19 @@ func authorLoader() {
 			continue
 		}
 		authorIDFilter.AddString(strconv.FormatUint(receiver.Id, 16))
+
 		words := tokenize.TextToWords(receiver.Name)
+		var wordCnt uint64
 		for _, word := range words {
 			for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' ||
 				word[0] == '`' || word[0] == '*' || word[0] == '+' || word[0] == '=' || word[0] == '^' ||
-				word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|') {
+				word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|' || word[0] == '~') {
 				word = word[1:]
 			}
 			if len(word) == 0 || len(word) == 1 {
 				continue
 			} else {
+				wordCnt++
 				word = strings.ToLower(word)
 				t := spellChecker.SpellCheck(word)
 				if len(t) != 0 {
@@ -182,6 +194,11 @@ func authorLoader() {
 				authorWordFilter.AddString(word)
 				WordToAuthorRDB.HIncrBy(context.Background(), word, strconv.FormatUint(receiver.Id, 16), 1)
 			}
+		}
+
+		err = DB.Model(&AuthorWordCount{}).Create(&AuthorWordCount{ID: i, Count: wordCnt}).Error
+		if err != nil {
+			log.Println(err)
 		}
 	}
 
