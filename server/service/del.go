@@ -2,7 +2,7 @@ package service
 
 import (
 	"errors"
-	"paperSearchServer/dao"
+	"server/dao"
 	"strconv"
 	"strings"
 )

@@ -62,8 +62,9 @@ func articleLoader() {
 		articleIDFilter.AddString(strconv.FormatUint(receiver.Id, 16))
 		words := tokenize.TextToWords(receiver.Title)
 		for _, word := range words {
-			for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' || word[0] == '`' || word[0] == '*' ||
-				word[0] == '+' || word[0] == '=' || word[0] == '^' || word[0] == '\\' || word[0] == ',') {
+			for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' ||
+				word[0] == '`' || word[0] == '*' || word[0] == '+' || word[0] == '=' || word[0] == '^' ||
+				word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|') {
 				word = word[1:]
 			}
 			if len(word) == 0 || len(word) == 1 {
@@ -165,8 +166,9 @@ func authorLoader() {
 		authorIDFilter.AddString(strconv.FormatUint(receiver.Id, 16))
 		words := tokenize.TextToWords(receiver.Name)
 		for _, word := range words {
-			for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' || word[0] == '`' || word[0] == '*' ||
-				word[0] == '+' || word[0] == '=' || word[0] == '^' || word[0] == '\\' || word[0] == ',') {
+			for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' ||
+				word[0] == '`' || word[0] == '*' || word[0] == '+' || word[0] == '=' || word[0] == '^' ||
+				word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|') {
 				word = word[1:]
 			}
 			if len(word) == 0 || len(word) == 1 {
