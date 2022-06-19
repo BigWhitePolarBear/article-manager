@@ -35,17 +35,15 @@ func init() {
 		panic(err)
 	}
 
-	WordToArticleRDB = redis.NewFailoverClient(&redis.FailoverOptions{
-		MasterName:    "mymaster",
-		SentinelAddrs: []string{":17000", ":17001", ":17002"},
-		DB:            numWordToArticleRDB,
-		Password:      "zxc05020519",
+	WordToArticleRDB = redis.NewClient(&redis.Options{
+		Addr:     ":7000",
+		DB:       numWordToArticleRDB,
+		Password: "zxc05020519",
 	})
 
-	WordToAuthorRDB = redis.NewFailoverClient(&redis.FailoverOptions{
-		MasterName:    "mymaster",
-		SentinelAddrs: []string{":17000", ":17001", ":17002"},
-		DB:            numWordToAuthorRDB,
-		Password:      "zxc05020519",
+	WordToAuthorRDB = redis.NewClient(&redis.Options{
+		Addr:     ":7000",
+		DB:       numWordToAuthorRDB,
+		Password: "zxc05020519",
 	})
 }

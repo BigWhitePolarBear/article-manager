@@ -46,33 +46,32 @@ func SampleEnglish() []string {
 func articleLoader() {
 	defer wg.Done()
 
-	articleIDFilter := bloom.NewWithEstimates(1e7, 0.01)
-	articleWordFilter := bloom.NewWithEstimates(1e7, 0.01)
+	articleIDFilter := bloom.NewWithEstimates(1e7, 0.1)
+	articleWordFilter := bloom.NewWithEstimates(1e7, 0.1)
 
-	rows, err := DB.Table("articles").Select("id", "title").Rows()
-	if err != nil {
-		panic(err)
-	}
-
-	var (
-		id    uint64
-		title string
-	)
-	for rows.Next() {
-		err = rows.Scan(&id, &title)
+	for i := 1; i <= 2423332; i++ {
+		receiver := struct {
+			Id    uint64
+			Title string
+		}{}
+		err := DB.Table("articles").Where("id = ?", i).Select("id", "title").Find(&receiver).Error
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-		articleIDFilter.AddString(strconv.FormatUint(id, 16))
-		words := tokenize.TextToWords(title)
+		articleIDFilter.AddString(strconv.FormatUint(receiver.Id, 16))
+		words := tokenize.TextToWords(receiver.Title)
 		for _, word := range words {
-			if len(word) == 1 {
+			for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' || word[0] == '`' || word[0] == '*' ||
+				word[0] == '+' || word[0] == '=' || word[0] == '^' || word[0] == '\\' || word[0] == ',') {
+				word = word[1:]
+			}
+			if len(word) == 0 || len(word) == 1 {
 				continue
-			} else if len(word) == 2 && (word == "of" || word == "to" || word == "it" ||
-				word == "as" || word == "or" || word == "in" || word == "on") {
+			} else if len(word) == 2 && (word == "of" || word == "to" || word == "it" || word == "as" ||
+				word == "or" || word == "in" || word == "on" || word == "'s" || word == "``") {
 				continue
-			} else if len(word) == 3 && (word == "and" || word == "for" || word == "its") {
+			} else if len(word) == 3 && (word == "and" || word == "for" || word == "its" || word == "the") {
 				continue
 			} else if len(word) == 4 && (word == "with" || word == "when" || word == "that" ||
 				word == "this") {
@@ -90,7 +89,7 @@ func articleLoader() {
 				}
 				word = inflection.Singular(word)
 				articleWordFilter.AddString(word)
-				WordToArticleRDB.HIncrBy(context.Background(), word, strconv.FormatUint(id, 16), 1)
+				WordToArticleRDB.HIncrBy(context.Background(), word, strconv.FormatUint(receiver.Id, 16), 1)
 			}
 		}
 	}
@@ -110,7 +109,7 @@ func articleLoader() {
 		}
 
 		for i := range indexes {
-			id, err = strconv.ParseUint(indexes[i], 16, 64)
+			id, err := strconv.ParseUint(indexes[i], 16, 64)
 			if err != nil {
 				log.Println(err)
 				continue
@@ -150,28 +149,27 @@ func articleLoader() {
 func authorLoader() {
 	defer wg.Done()
 
-	authorIDFilter := bloom.NewWithEstimates(1e7, 0.01)
-	authorWordFilter := bloom.NewWithEstimates(1e7, 0.01)
+	authorIDFilter := bloom.NewWithEstimates(1e7, 0.1)
+	authorWordFilter := bloom.NewWithEstimates(1e7, 0.1)
 
-	rows, err := DB.Table("authors").Select("id", "name").Rows()
-	if err != nil {
-		panic(err)
-	}
-
-	var (
-		id   uint64
-		name string
-	)
-	for rows.Next() {
-		err = rows.Scan(&id, &name)
+	for i := 1; i <= 1540683; i++ {
+		receiver := struct {
+			Id   uint64
+			Name string
+		}{}
+		err := DB.Table("authors").Where("id = ?", i).Select("id", "name").Find(&receiver).Error
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-		authorIDFilter.AddString(strconv.FormatUint(id, 16))
-		words := tokenize.TextToWords(name)
+		authorIDFilter.AddString(strconv.FormatUint(receiver.Id, 16))
+		words := tokenize.TextToWords(receiver.Name)
 		for _, word := range words {
-			if len(word) == 1 {
+			for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' || word[0] == '`' || word[0] == '*' ||
+				word[0] == '+' || word[0] == '=' || word[0] == '^' || word[0] == '\\' || word[0] == ',') {
+				word = word[1:]
+			}
+			if len(word) == 0 || len(word) == 1 {
 				continue
 			} else {
 				word = strings.ToLower(word)
@@ -180,7 +178,7 @@ func authorLoader() {
 					word = t
 				}
 				authorWordFilter.AddString(word)
-				WordToAuthorRDB.HIncrBy(context.Background(), word, strconv.FormatUint(id, 16), 1)
+				WordToAuthorRDB.HIncrBy(context.Background(), word, strconv.FormatUint(receiver.Id, 16), 1)
 			}
 		}
 	}
@@ -200,7 +198,7 @@ func authorLoader() {
 		}
 
 		for i := range indexes {
-			id, err = strconv.ParseUint(indexes[i], 16, 64)
+			id, err := strconv.ParseUint(indexes[i], 16, 64)
 			if err != nil {
 				log.Println(err)
 				continue
