@@ -14,10 +14,11 @@ type Article struct {
 	ID        uint64         `gorm:"primaryKey"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
 	Title     string         `gorm:"type:varchar(1500) not null"`
-	Book      Book           `json:"-"`
-	BookID    *uint64        `json:",omitempty"`
-	Journal   Journal        `json:"-"`
-	JournalID *uint64        `json:",omitempty"`
+	Authors   []string       `json:",omitempty" gorm:"-"`
+	Book      Book           `json:",omitempty"`
+	BookID    *uint64        `json:"-"`
+	Journal   Journal        `json:",omitempty"`
+	JournalID *uint64        `json:"-"`
 	Volume    string         `json:",omitempty" gorm:"type:varchar(50)"`
 	Pages     string         `json:",omitempty" gorm:"type:varchar(50)"`
 	Year      *uint16        `json:",omitempty"`
@@ -61,7 +62,7 @@ func (a *Article) AfterFind(tx *gorm.DB) (err error) {
 func (a *Article) AfterCreate(tx *gorm.DB) (err error) {
 	a.saveIntoCache()
 
-	atomic.AddInt64(&authorCount, 1)
+	atomic.AddInt64(&AuthorCnt, 1)
 
 	return nil
 }

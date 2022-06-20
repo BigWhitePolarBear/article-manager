@@ -1,119 +1,90 @@
 package service
 
 import (
-	"math"
-	"paperSearchServer/dao"
+	"errors"
+	"github.com/jdkato/prose/tokenize"
+	"server/dao"
+	"sort"
 	"strings"
 )
 
-type Article struct {
-	ID        *uint `json:",omitempty"`
-	Title     string
-	Authors   string  `json:",omitempty"`
-	Journal   string  `json:",omitempty"`
-	Volume    string  `json:",omitempty"`
-	Month     string  `json:",omitempty"`
-	Year      *uint16 `json:",omitempty"`
-	CdRom     string  `json:",omitempty"`
-	EE        string  `json:",omitempty"`
-	Publisher string  `json:",omitempty"`
-	ISBN      string  `json:",omitempty"`
-}
-
-type Author struct {
-	Name         string
-	Works        string `json:",omitempty"`
-	ArticleCount uint16
-}
-
-type QueryType uint
+type QueryType uint8
 
 const (
-	TitleQuery = iota
+	TitleQuery QueryType = iota
 	YearQuery
 	AuthorQuery
 )
 
-func GetWork(query map[QueryType]string, limit, offset int, admin bool) (*[]Article, error) {
-	searchSQL := worksTable.Limit(limit).Offset(offset)
-	if query[TitleQuery] != "" {
-		searchSQL = searchSQL.Where("title = ?", query[TitleQuery])
-	}
-	if query[YearQuery] != "" {
-		searchSQL = searchSQL.Where("year = ?", query[YearQuery])
-	}
-	if query[AuthorQuery] != "" {
-		names := strings.Split(query[AuthorQuery], ",")
-		// Temporarily stored the ids.
-		var idLists []string
-		authorsTable.Where("name in ?", names).Select("works").Find(&idLists)
+type IndexScore struct {
+	ID    uint64
+	Score float64
+}
 
-		// Record each set of work id, for finding out their intersection.
-		// 'l' means length.
-		resL := math.MaxInt
-		tempMaps := make([]map[string]struct{}, 0, len(idLists))
-		for _, _idList := range idLists {
-			l := len(_idList)
-			if l < resL {
-				resL = l
-			}
-			tempMap := make(map[string]struct{}, l)
-			idList := strings.Fields(_idList)
-			for _, id := range idList {
-				tempMap[id] = struct{}{}
-			}
-			tempMaps = append(tempMaps, tempMap)
+func SearchArticle(query map[QueryType]string, admin bool) (articles []dao.Article, err error) {
+	invertedIndexes := make([]dao.InvertedIndex, 0)
+
+	// get inverted-indexes by title queries.
+	titleText, ok := query[TitleQuery]
+	if ok {
+		titleWords := queryTextToWord(titleText)
+
+		invertedIndexes = getInvertedIndexes(titleWords, word2article)
+		if 2*len(titleWords) < len(invertedIndexes) {
+			return nil, errors.New("no match records for your title queries")
 		}
-		workIDs := make([]string, 0, resL)
-		// Drop the ids those aren't exist in the work list of every author.
-	Loop:
-		for id := range tempMaps[0] {
-			for _, M := range tempMaps {
-				if _, ok := M[id]; !ok {
-					continue Loop
-				}
-			}
-			workIDs = append(workIDs, id)
-		}
-		searchSQL = searchSQL.Where("id in ?", workIDs)
 	}
 
-	_results := []dao.Article{}
-	err := searchSQL.Find(&_results).Error
+	// get inverted-indexes by authors.
+	authorText, ok := query[AuthorQuery]
+	if ok {
+		authorWords := queryTextToWord(authorText)
+		authorInvertedIndexes := getInvertedIndexes(authorWords, word2author)
+		if err != nil {
+			return nil, err
+		}
+
+		authorIndexes, err := dao.Union(authorInvertedIndexes)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(authorIndexes) == 0 {
+			return nil, errors.New("no match records for your author queries")
+		}
+
+		strAuthorIndexes := make([]string, len(authorIndexes))
+
+		_invertedIndexes := getInvertedIndexes(strAuthorIndexes, author2article)
+		if err != nil {
+			return nil, err
+		}
+
+		invertedIndexes = append(invertedIndexes, _invertedIndexes...)
+	}
+
+	articleIndexes, err := dao.Union(invertedIndexes)
 	if err != nil {
 		return nil, err
-	} else {
-		results := make([]Article, 0, len(_results))
-		for _, _result := range _results {
-			temp := Article{}
-			if admin {
-				temp.ID = &_result.ID
-			}
-			temp.Title, temp.ISBN, temp.CdRom, temp.Month, temp.Year, temp.Volume, temp.EE =
-				_result.Title, _result.ISBN, _result.CdRom, _result.Month, _result.Year, _result.Volume, _result.EE
-
-			if _result.JournalID != nil {
-				journalsTable.Where("id = ?", *_result.JournalID).Select("name").Find(&temp.Journal)
-			}
-			if _result.PublisherID != nil {
-				publishersTable.Where("id = ?", *_result.PublisherID).Select("name").Find(&temp.Publisher)
-			}
-
-			authorID := strings.Fields(_result.Authors)
-			authorBuilder := strings.Builder{}
-			for i, id := range authorID {
-				if i > 0 {
-					authorBuilder.WriteString(", ")
-				}
-				name := ""
-				authorsTable.Where("id = ?", id).Select("name").Find(&name)
-				authorBuilder.WriteString(name)
-			}
-			temp.Authors = authorBuilder.String()
-			results = append(results, temp)
-		}
-		return &results, nil
 	}
+	indexScores := make([]IndexScore, len(articleIndexes))
+	for i := range articleIndexes {
+		indexScores[i].ID = articleIndexes[i]
+		indexScores[i].Score = bm25(articleIndexes[i], invertedIndexes, word2article)
+	}
+
+	sort.Slice(indexScores, func(i, j int) bool {
+		return indexScores[i].Score < indexScores[j].Score
+	})
+
+	for _, is := range indexScores {
+		article, ok := getArticle(is.ID, admin)
+		if ok {
+			articles = append(articles, article)
+		}
+	}
+
+	return
 }
 
 func GetAuthor(name string, limit, offset int) ([]Author, error) {
@@ -151,4 +122,35 @@ func GetTopAuthor(limit, offset int) (*[]Author, error) {
 		return nil, err
 	}
 	return &results, nil
+}
+
+func queryTextToWord(text string) (words []string) {
+	_words := tokenize.TextToWords(text)
+	for _, word := range _words {
+		for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' ||
+			word[0] == '`' || word[0] == '*' || word[0] == '+' || word[0] == '=' || word[0] == '^' ||
+			word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|' || word[0] == '~' ||
+			word[0] == '(' || word[0] == ')') {
+			word = word[1:]
+		}
+		if len(word) == 0 || len(word) == 1 {
+			continue
+		} else if len(word) == 2 && (word == "of" || word == "to" || word == "it" || word == "as" ||
+			word == "or" || word == "in" || word == "on" || word == "'s" || word == "``") {
+			continue
+		} else if len(word) == 3 && (word == "and" || word == "for" || word == "its" || word == "the") {
+			continue
+		} else if len(word) == 4 && (word == "with" || word == "when" || word == "that" ||
+			word == "this") {
+			continue
+		} else if len(word) == 5 && (word == "while" || word == "about" || word == "their" ||
+			word == "those" || word == "these") {
+			continue
+		} else if len(word) == 6 && (word == "across" || word == "inside") {
+			continue
+		} else {
+			words = append(words, word)
+		}
+	}
+	return
 }

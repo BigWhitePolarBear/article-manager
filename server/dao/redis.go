@@ -7,13 +7,16 @@ import (
 )
 
 var (
-	CommonCache        *cache.Cache
-	WordToArticleCache *cache.Cache
-	WordToAuthorCache  *cache.Cache
-	ArticleCache       *cache.Cache
-	AuthorCache        *cache.Cache
-	BookCache          *cache.Cache
-	JournalCache       *cache.Cache
+	CommonCache         *cache.Cache
+	WordToArticleCache  *cache.Cache
+	WordToAuthorCache   *cache.Cache
+	ArticleCache        *cache.Cache
+	AuthorCache         *cache.Cache
+	BookCache           *cache.Cache
+	JournalCache        *cache.Cache
+	ArticleWordCntCache *cache.Cache
+	AuthorWordCntCache  *cache.Cache
+
 	ArticleToAuthorRDB *redis.Client
 	AuthorToArticleRDB *redis.Client
 )
@@ -28,6 +31,8 @@ const (
 	numJournalCacheRDB
 	numArticleToAuthorRDB
 	numAuthorToArticleRDB
+	numArticleWordCntRDB
+	numAuthorWordCntRDB
 )
 
 func init() {
@@ -89,6 +94,24 @@ func init() {
 		Redis: redis.NewFailoverClient(&redis.FailoverOptions{
 			SentinelAddrs: []string{":17000", ":17001", ":17002"},
 			DB:            numJournalCacheRDB,
+			Password:      "zxc05020519",
+		}),
+		LocalCache: cache.NewTinyLFU(1000, time.Minute),
+	})
+
+	ArticleWordCntCache = cache.New(&cache.Options{
+		Redis: redis.NewFailoverClient(&redis.FailoverOptions{
+			SentinelAddrs: []string{":17000", ":17001", ":17002"},
+			DB:            numArticleWordCntRDB,
+			Password:      "zxc05020519",
+		}),
+		LocalCache: cache.NewTinyLFU(1000, time.Minute),
+	})
+
+	AuthorWordCntCache = cache.New(&cache.Options{
+		Redis: redis.NewFailoverClient(&redis.FailoverOptions{
+			SentinelAddrs: []string{":17000", ":17001", ":17002"},
+			DB:            numAuthorWordCntRDB,
 			Password:      "zxc05020519",
 		}),
 		LocalCache: cache.NewTinyLFU(1000, time.Minute),

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/bits-and-blooms/bloom/v3"
 	"github.com/jdkato/prose/tokenize"
 	"github.com/jinzhu/inflection"
 	"log"
@@ -46,9 +45,6 @@ func SampleEnglish() []string {
 func articleLoader() {
 	defer wg.Done()
 
-	articleIDFilter := bloom.NewWithEstimates(1e7, 0.1)
-	articleWordFilter := bloom.NewWithEstimates(1e7, 0.1)
-
 	var i uint64 = 1
 	for ; i <= 2423332; i++ {
 		receiver := struct {
@@ -60,14 +56,14 @@ func articleLoader() {
 			log.Println(err)
 			continue
 		}
-		articleIDFilter.AddString(strconv.FormatUint(receiver.Id, 16))
 
 		words := tokenize.TextToWords(receiver.Title)
 		var wordCnt uint64
 		for _, word := range words {
 			for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' ||
 				word[0] == '`' || word[0] == '*' || word[0] == '+' || word[0] == '=' || word[0] == '^' ||
-				word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|' || word[0] == '~') {
+				word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|' || word[0] == '~' ||
+				word[0] == '(' || word[0] == ')') {
 				word = word[1:]
 			}
 			if len(word) == 0 || len(word) == 1 {
@@ -93,7 +89,6 @@ func articleLoader() {
 					word = t
 				}
 				word = inflection.Singular(word)
-				articleWordFilter.AddString(word)
 				WordToArticleRDB.HIncrBy(context.Background(), word, strconv.FormatUint(receiver.Id, 16), 1)
 			}
 		}
@@ -140,26 +135,10 @@ func articleLoader() {
 
 		WordToArticleRDB.Del(context.Background(), word)
 	}
-
-	// Storage bloom filter into database
-	filterJson, err := articleIDFilter.MarshalJSON()
-	if err != nil {
-		panic(err)
-	}
-	DB.Table("variables").Create(variable{"ArticleIDFilter", string(filterJson)})
-
-	filterJson, err = articleWordFilter.MarshalJSON()
-	if err != nil {
-		panic(err)
-	}
-	DB.Table("variables").Create(variable{"ArticleWordFilter", string(filterJson)})
 }
 
 func authorLoader() {
 	defer wg.Done()
-
-	authorIDFilter := bloom.NewWithEstimates(1e7, 0.1)
-	authorWordFilter := bloom.NewWithEstimates(1e7, 0.1)
 
 	var i uint64 = 1
 	for ; i <= 1540683; i++ {
@@ -172,14 +151,14 @@ func authorLoader() {
 			log.Println(err)
 			continue
 		}
-		authorIDFilter.AddString(strconv.FormatUint(receiver.Id, 16))
 
 		words := tokenize.TextToWords(receiver.Name)
 		var wordCnt uint64
 		for _, word := range words {
 			for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' ||
 				word[0] == '`' || word[0] == '*' || word[0] == '+' || word[0] == '=' || word[0] == '^' ||
-				word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|' || word[0] == '~') {
+				word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|' || word[0] == '~' ||
+				word[0] == '(' || word[0] == ')') {
 				word = word[1:]
 			}
 			if len(word) == 0 || len(word) == 1 {
@@ -191,7 +170,6 @@ func authorLoader() {
 				if len(t) != 0 {
 					word = t
 				}
-				authorWordFilter.AddString(word)
 				WordToAuthorRDB.HIncrBy(context.Background(), word, strconv.FormatUint(receiver.Id, 16), 1)
 			}
 		}
@@ -239,17 +217,4 @@ func authorLoader() {
 
 		WordToAuthorRDB.Del(context.Background(), word)
 	}
-
-	// Storage bloom filter into database
-	filterJson, err := authorIDFilter.MarshalJSON()
-	if err != nil {
-		panic(err)
-	}
-	DB.Table("variables").Create(variable{"AuthorIDFilter", string(filterJson)})
-
-	filterJson, err = authorWordFilter.MarshalJSON()
-	if err != nil {
-		panic(err)
-	}
-	DB.Table("variables").Create(variable{"AuthorWordFilter", string(filterJson)})
 }

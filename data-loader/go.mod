@@ -1,4 +1,4 @@
-module load-data
+module data-loader
 
 go 1.18
 

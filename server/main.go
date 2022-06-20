@@ -2,15 +2,14 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
-	"paperSearchServer/controller"
-	"paperSearchServer/controller/post"
+	"server/controller"
 )
 
 func main() {
 	c := gin.Default()
 
 	// Retrieve
-	c.GET("/papers/search", controller.GetWork)
+	c.GET("/article/search", controller.SearchArticle)
 	c.GET("/authors/search", controller.GetAuthor)
 	c.GET("/authors/top/:page", controller.GetTopAuthor)
 

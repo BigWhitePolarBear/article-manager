@@ -22,11 +22,6 @@ type AuthorWordCount struct {
 	Count uint64
 }
 
-type variable struct {
-	Key   string
-	Value string
-}
-
 func init() {
 	err := DB.AutoMigrate(&WordToAuthor{}, &WordToArticle{}, &ArticleWordCount{}, &AuthorWordCount{})
 	if err != nil {

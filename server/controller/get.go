@@ -3,14 +3,16 @@ package controller
 import (
 	"github.com/gin-gonic/gin"
 	"net/http"
-	"paperSearchServer/service"
+	"server/service"
 	"strconv"
 )
 
-func GetWork(c *gin.Context) {
+func SearchArticle(c *gin.Context) {
 	query := make(map[service.QueryType]string)
 	if title, ok := c.GetQuery("title"); ok {
 		query[service.TitleQuery] = title
+	} else {
+		c.JSON(http.StatusBadRequest, "Must input title queries!")
 	}
 	if year, ok := c.GetQuery("year"); ok {
 		query[service.YearQuery] = year
@@ -23,20 +25,13 @@ func GetWork(c *gin.Context) {
 	if c.Keys["admin"] != nil {
 		admin = true
 	}
-	page, err := strconv.Atoi(c.DefaultQuery("page", "0"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"Error": err.Error(),
-		})
-		return
-	}
-	results, err := service.GetWork(query, 50, page*50, admin)
+	results, err := service.SearchArticle(query, admin)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"Error": err.Error(),
 		})
 	} else {
-		c.JSON(http.StatusOK, *results)
+		c.JSON(http.StatusOK, results)
 	}
 }
 

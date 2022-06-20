@@ -59,6 +59,11 @@ func (a *AuthorToArticle) saveIntoCache() {
 	if err != nil {
 		log.Println("dao/author_article.go saveIntoCache error:", err)
 	}
+
+	err = AuthorToArticleRDB.Expire(context.Background(), strconv.FormatUint(a.AuthorID, 10), time.Minute).Err()
+	if err != nil {
+		log.Println("dao/author_article.go saveIntoCache error:", err)
+	}
 }
 
 func (a *AuthorToArticle) deleteFromCache() {

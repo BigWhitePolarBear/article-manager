@@ -76,8 +76,3 @@ Loop:
 
 	return
 }
-
-func bm25score(indexes []uint64, InvertedIndexes []InvertedIndex, totalCnt int64) (score float32) {
-
-	return
-}
