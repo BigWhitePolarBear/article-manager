@@ -31,6 +31,7 @@ func getInvertedIndex(field string, choice IndexChoice) (invertedIndex dao.Inver
 		if !dao.ArticleWordFilter.TestString(field) {
 			return nil
 		}
+
 		var _invertedIndex string
 		err := dao.WordToArticleCache.Get(context.Background(), field, &_invertedIndex)
 		if err != nil {
@@ -49,6 +50,7 @@ func getInvertedIndex(field string, choice IndexChoice) (invertedIndex dao.Inver
 		if !dao.AuthorWordFilter.TestString(field) {
 			return nil
 		}
+
 		var _invertedIndex string
 		err := dao.WordToAuthorCache.Get(context.Background(), field, &_invertedIndex)
 		if err != nil {

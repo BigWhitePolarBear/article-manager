@@ -127,10 +127,8 @@ func GetTopAuthor(limit, offset int) (*[]Author, error) {
 func queryTextToWord(text string) (words []string) {
 	_words := tokenize.TextToWords(text)
 	for _, word := range _words {
-		for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' ||
-			word[0] == '`' || word[0] == '*' || word[0] == '+' || word[0] == '=' || word[0] == '^' ||
-			word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|' || word[0] == '~' ||
-			word[0] == '(' || word[0] == ')') {
+		for len(word) > 0 && !('a' <= word[0] && word[0] <= 'z' ||
+			'A' <= word[0] && word[0] <= 'Z' || '0' <= word[0] && word[0] <= '9') {
 			word = word[1:]
 		}
 		if len(word) == 0 || len(word) == 1 {

@@ -8,11 +8,6 @@ import (
 )
 
 func getArticle(id uint64, admin bool) (article dao.Article, ok bool) {
-	// test with bloom filter
-	if !dao.ArticleIDFilter.TestString(strconv.FormatUint(id, 10)) {
-		return article, false
-	}
-
 	var jsonArticle []byte
 	err := dao.ArticleCache.Get(context.Background(), strconv.FormatUint(id, 10), &jsonArticle)
 	if err == nil {

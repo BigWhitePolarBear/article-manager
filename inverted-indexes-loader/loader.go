@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/jdkato/prose/tokenize"
-	"github.com/jinzhu/inflection"
 	"log"
 	"os"
 	"regexp"
@@ -45,58 +44,65 @@ func SampleEnglish() []string {
 func articleLoader() {
 	defer wg.Done()
 
-	var i uint64 = 1
-	for ; i <= 2423332; i++ {
-		receiver := struct {
-			Id    uint64
-			Title string
-		}{}
-		err := DB.Table("articles").Where("id = ?", i).Select("id", "title").Find(&receiver).Error
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		words := tokenize.TextToWords(receiver.Title)
-		var wordCnt uint64
-		for _, word := range words {
-			for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' ||
-				word[0] == '`' || word[0] == '*' || word[0] == '+' || word[0] == '=' || word[0] == '^' ||
-				word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|' || word[0] == '~' ||
-				word[0] == '(' || word[0] == ')') {
-				word = word[1:]
-			}
-			if len(word) == 0 || len(word) == 1 {
-				continue
-			} else if len(word) == 2 && (word == "of" || word == "to" || word == "it" || word == "as" ||
-				word == "or" || word == "in" || word == "on" || word == "'s" || word == "``") {
-				continue
-			} else if len(word) == 3 && (word == "and" || word == "for" || word == "its" || word == "the") {
-				continue
-			} else if len(word) == 4 && (word == "with" || word == "when" || word == "that" ||
-				word == "this") {
-				continue
-			} else if len(word) == 5 && (word == "while" || word == "about" || word == "their" ||
-				word == "those" || word == "these") {
-				continue
-			} else if len(word) == 6 && (word == "across" || word == "inside") {
-				continue
-			} else {
-				wordCnt++
-				word = strings.ToLower(word)
-				t := spellChecker.SpellCheck(word)
-				if len(t) != 0 {
-					word = t
-				}
-				word = inflection.Singular(word)
-				WordToArticleRDB.HIncrBy(context.Background(), word, strconv.FormatUint(receiver.Id, 16), 1)
-			}
-		}
-		err = DB.Model(&ArticleWordCount{}).Create(&ArticleWordCount{ID: i, Count: wordCnt}).Error
-		if err != nil {
-			log.Println(err)
-		}
-	}
+	//var (
+	//	i     uint64 = 1
+	//	maxID uint64
+	//)
+	//
+	//err := DB.Table("articles").Select("max(id)").Find(&maxID).Error
+	//if err != nil {
+	//	panic(err)
+	//}
+	//
+	//for ; i <= maxID; i++ {
+	//	receiver := struct {
+	//		Id    uint64
+	//		Title string
+	//	}{}
+	//	err = DB.Table("articles").Where("id = ?", i).Select("id", "title").Find(&receiver).Error
+	//	if err != nil {
+	//		log.Println(err)
+	//		continue
+	//	}
+	//
+	//	words := tokenize.TextToWords(receiver.Title)
+	//	var wordCnt uint64
+	//	for _, word := range words {
+	//		for len(word) > 0 && !('a' <= word[0] && word[0] <= 'z' ||
+	//			'A' <= word[0] && word[0] <= 'Z' || '0' <= word[0] && word[0] <= '9') {
+	//			word = word[1:]
+	//		}
+	//		if len(word) <= 1 {
+	//			continue
+	//		} else if len(word) == 2 && (word == "of" || word == "to" || word == "it" || word == "as" ||
+	//			word == "or" || word == "in" || word == "on" || word == "'s" || word == "``") {
+	//			continue
+	//		} else if len(word) == 3 && (word == "and" || word == "for" || word == "its" || word == "the") {
+	//			continue
+	//		} else if len(word) == 4 && (word == "with" || word == "when" || word == "that" ||
+	//			word == "this") {
+	//			continue
+	//		} else if len(word) == 5 && (word == "while" || word == "about" || word == "their" ||
+	//			word == "those" || word == "these") {
+	//			continue
+	//		} else if len(word) == 6 && (word == "across" || word == "inside") {
+	//			continue
+	//		} else {
+	//			wordCnt++
+	//			word = strings.ToLower(word)
+	//			t := spellChecker.SpellCheck(word)
+	//			if len(t) != 0 {
+	//				word = t
+	//			}
+	//			word = inflection.Singular(word)
+	//			WordToArticleRDB.HIncrBy(context.Background(), word, strconv.FormatUint(receiver.Id, 16), 1)
+	//		}
+	//	}
+	//	err = DB.Model(&ArticleWordCount{}).Create(&ArticleWordCount{ID: i, Count: wordCnt}).Error
+	//	if err != nil {
+	//		log.Println(err)
+	//	}
+	//}
 
 	// Get all words and their indexes
 	keys, err := WordToArticleRDB.Keys(context.Background(), "*").Result()
@@ -140,13 +146,22 @@ func articleLoader() {
 func authorLoader() {
 	defer wg.Done()
 
-	var i uint64 = 1
-	for ; i <= 1540683; i++ {
+	var (
+		i     uint64 = 1
+		maxID uint64
+	)
+
+	err := DB.Table("authors").Select("max(id)").Find(&maxID).Error
+	if err != nil {
+		panic(err)
+	}
+
+	for ; i <= maxID; i++ {
 		receiver := struct {
 			Id   uint64
 			Name string
 		}{}
-		err := DB.Table("authors").Where("id = ?", i).Select("id", "name").Find(&receiver).Error
+		err = DB.Table("authors").Where("id = ?", i).Select("id", "name").Find(&receiver).Error
 		if err != nil {
 			log.Println(err)
 			continue
@@ -155,13 +170,11 @@ func authorLoader() {
 		words := tokenize.TextToWords(receiver.Name)
 		var wordCnt uint64
 		for _, word := range words {
-			for len(word) > 0 && (word[0] == '\'' || word[0] == '-' || word[0] == '/' || word[0] == '.' ||
-				word[0] == '`' || word[0] == '*' || word[0] == '+' || word[0] == '=' || word[0] == '^' ||
-				word[0] == '\\' || word[0] == ',' || word[0] == '_' || word[0] == '|' || word[0] == '~' ||
-				word[0] == '(' || word[0] == ')') {
+			for len(word) > 0 && !('a' <= word[0] && word[0] <= 'z' ||
+				'A' <= word[0] && word[0] <= 'Z' || '0' <= word[0] && word[0] <= '9') {
 				word = word[1:]
 			}
-			if len(word) == 0 || len(word) == 1 {
+			if len(word) <= 1 {
 				continue
 			} else {
 				wordCnt++
