@@ -17,8 +17,8 @@ var (
 
 	ArticleCnt        int64
 	AuthorCnt         int64
-	ArticleAvgWordCnt float64
-	AuthorAvgWordCnt  float64
+	ArticleAvgWordCnt float32
+	AuthorAvgWordCnt  float32
 
 	ArticleIDFilter   *bloom.BloomFilter
 	ArticleWordFilter *bloom.BloomFilter
@@ -27,16 +27,16 @@ var (
 	AuthorWordFilter *bloom.BloomFilter
 )
 
-func init() {
+func Init() {
 	DB.Model(&Article{}).Count(&ArticleCnt)
 	DB.Model(&Author{}).Count(&AuthorCnt)
 
-	err := DB.Model(&Variable{}).Where("key = ?", "ArticleAvgWordCnt").
+	err := DB.Model(&Variable{}).Where("`key` = ?", "ArticleAvgWordCnt").
 		Select("value").Find(&ArticleAvgWordCnt).Error
 	if err != nil {
 		panic(err)
 	}
-	err = DB.Model(&Variable{}).Where("key = ?", "AuthorAvgWordCnt").
+	err = DB.Model(&Variable{}).Where("`key` = ?", "AuthorAvgWordCnt").
 		Select("value").Find(&AuthorAvgWordCnt).Error
 	if err != nil {
 		panic(err)
@@ -50,26 +50,32 @@ func init() {
 		jsonAuthorWordFilter  string
 	)
 
-	err = DB.Model(&Variable{}).Where("key = ?", "ArticleIDFilter").
+	err = DB.Model(&Variable{}).Where("`key` = ?", "ArticleIDFilter").
 		Select("value").Find(&jsonArticleIDFilter).Error
 	if err != nil {
 		panic(err)
 	}
-	err = DB.Model(&Variable{}).Where("key = ?", "ArticleWordFilter").
+	err = DB.Model(&Variable{}).Where("`key` = ?", "ArticleWordFilter").
 		Select("value").Find(&jsonArticleWordFilter).Error
 	if err != nil {
 		panic(err)
 	}
-	err = DB.Model(&Variable{}).Where("key = ?", "AuthorIDFilter").
+	err = DB.Model(&Variable{}).Where("`key` = ?", "AuthorIDFilter").
 		Select("value").Find(&jsonAuthorIDFilter).Error
 	if err != nil {
 		panic(err)
 	}
-	err = DB.Model(&Variable{}).Where("key = ?", "AuthorWordFilter").
+	err = DB.Model(&Variable{}).Where("`key` = ?", "AuthorWordFilter").
 		Select("value").Find(&jsonAuthorWordFilter).Error
 	if err != nil {
 		panic(err)
 	}
+
+	ArticleIDFilter = &bloom.BloomFilter{}
+	ArticleWordFilter = &bloom.BloomFilter{}
+
+	AuthorIDFilter = &bloom.BloomFilter{}
+	AuthorWordFilter = &bloom.BloomFilter{}
 
 	err = ArticleIDFilter.UnmarshalJSON([]byte(jsonArticleIDFilter))
 	if err != nil {

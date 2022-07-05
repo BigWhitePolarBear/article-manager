@@ -4,3 +4,4 @@
 data-loader/data-loader
 inverted-indexes-loader/inverted-indexes-loader
 analyzer/analyzer
+server/server

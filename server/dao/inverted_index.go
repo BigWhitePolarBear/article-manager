@@ -3,12 +3,13 @@ package dao
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
 
-// InvertedIndex is a mapping of id and counts belonging to a word.
-type InvertedIndex map[uint64]int
+// InvertedIndex is a mapping of id and counts belonging to a Word.
+type InvertedIndex map[uint64]uint64
 
 func (s InvertedIndex) Add(num uint64) {
 	s[num]++
@@ -20,7 +21,7 @@ func (s InvertedIndex) AddSlice(nums []uint64) {
 	}
 }
 
-func (s InvertedIndex) Get(num uint64) (cnt int) {
+func (s InvertedIndex) Get(num uint64) (cnt uint64) {
 	cnt = s[num]
 	return
 }
@@ -36,7 +37,9 @@ func (s InvertedIndex) Serialize() string {
 	return builder.String()
 }
 
-func (s InvertedIndex) UnSerialize(str string) (err error) {
+func (s *InvertedIndex) UnSerialize(str string) (err error) {
+	*s = InvertedIndex{}
+
 	temp := strings.Fields(str)
 
 	for _, t := range temp {
@@ -45,33 +48,54 @@ func (s InvertedIndex) UnSerialize(str string) (err error) {
 		if err != nil {
 			return err
 		}
-		cnt, err := strconv.Atoi(_t[1])
+		cnt, err := strconv.ParseUint(_t[1], 16, 64)
 		if err != nil {
 			return err
 		}
-		s[id] = cnt
+		(*s)[id] = cnt
 	}
 
 	return nil
 }
 
-// Union return the union set of inverted-indexes in the slice.
-func Union(InvertedIndexes []InvertedIndex) (indexes []uint64, err error) {
+// Intersection return the union set of inverted-IDs in the slice.
+func Intersection(InvertedIndexes []InvertedIndex) (indexes []uint64, err error) {
 	n := len(InvertedIndexes)
 	if n == 0 {
-		return nil, errors.New("the input of Union func is empty")
+		return nil, errors.New("the input of Intersection func is empty")
 	}
 
-	firstInvertedIndex := InvertedIndexes[0]
+	// Shorter index first.
+	sort.Slice(InvertedIndexes, func(i, j int) bool {
+		return len(InvertedIndexes[i]) < len(InvertedIndexes[j])
+	})
+
 Loop:
-	for word := range firstInvertedIndex {
+	for id := range InvertedIndexes[0] {
 		for i := 1; i < n; i++ {
-			_, exist := InvertedIndexes[i][word]
+			_, exist := InvertedIndexes[i][id]
 			if !exist {
 				continue Loop
 			}
 		}
-		indexes = append(indexes, word)
+		indexes = append(indexes, id)
+	}
+
+	return
+}
+
+func Union(InvertedIndexes []InvertedIndex) (invertedIndex InvertedIndex, err error) {
+	n := len(InvertedIndexes)
+	if n == 0 {
+		return InvertedIndex{}, errors.New("the input of Union func is empty")
+	}
+
+	invertedIndex = map[uint64]uint64{}
+
+	for i := range InvertedIndexes {
+		for id := range InvertedIndexes[i] {
+			invertedIndex[id] = 1
+		}
 	}
 
 	return

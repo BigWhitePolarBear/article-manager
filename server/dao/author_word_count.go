@@ -11,30 +11,30 @@ import (
 
 type AuthorWordCount struct {
 	ID    uint64 `gorm:"primaryKey"`
-	Count uint64
+	Count uint8
 }
 
 func (a *AuthorWordCount) BeforeSave(tx *gorm.DB) (err error) {
-	a.deleteFromCache()
+	go a.deleteFromCache()
 	return nil
 }
 
 func (a *AuthorWordCount) AfterSave(tx *gorm.DB) (err error) {
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		a.deleteFromCache()
 	}()
 	return nil
 }
 
 func (a *AuthorWordCount) BeforeUpdate(tx *gorm.DB) (err error) {
-	a.deleteFromCache()
+	go a.deleteFromCache()
 	return nil
 }
 
 func (a *AuthorWordCount) AfterUpdate(tx *gorm.DB) (err error) {
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		a.deleteFromCache()
 	}()
 	return nil
@@ -42,14 +42,14 @@ func (a *AuthorWordCount) AfterUpdate(tx *gorm.DB) (err error) {
 
 // AfterFind write into cache after search
 func (a *AuthorWordCount) AfterFind(tx *gorm.DB) (err error) {
-	a.saveIntoCache()
+	go a.saveIntoCache()
 
 	return nil
 }
 
 // AfterCreate write into cache after creation
 func (a *AuthorWordCount) AfterCreate(tx *gorm.DB) (err error) {
-	a.saveIntoCache()
+	go a.saveIntoCache()
 
 	return nil
 }
@@ -57,8 +57,8 @@ func (a *AuthorWordCount) AfterCreate(tx *gorm.DB) (err error) {
 func (a *AuthorWordCount) saveIntoCache() {
 	err := ArticleWordCntCache.Set(&cache.Item{
 		Key:   strconv.FormatUint(a.ID, 10),
-		Value: strconv.FormatUint(a.Count, 10),
-		TTL:   time.Minute,
+		Value: a.Count,
+		TTL:   time.Hour,
 	})
 	if err != nil {
 		log.Println("dao/author_word_count.go saveIntoCache error:", err)
@@ -66,5 +66,11 @@ func (a *AuthorWordCount) saveIntoCache() {
 }
 
 func (a *AuthorWordCount) deleteFromCache() {
-	_ = AuthorCache.Delete(context.Background(), strconv.FormatUint(a.ID, 10))
+	retriedTimes := 0
+retry:
+	err := AuthorCache.Delete(context.Background(), strconv.FormatUint(a.ID, 10))
+	if err != nil && retriedTimes < 5 {
+		retriedTimes++
+		goto retry
+	}
 }

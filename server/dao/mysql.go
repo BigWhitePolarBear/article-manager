@@ -13,7 +13,7 @@ var (
 func init() {
 	var err error
 
-	dsn := "root:zxc05020519@tcp(192.168.200.128:3306)/paper_search_server?" +
+	dsn := "root:zxc05020519@tcp(127.0.0.1:3306)/article_manager?" +
 		"charset=utf8mb4&interpolateParams=true&parseTime=True&loc=Local"
 	DB, err = gorm.Open(mysql.Open(dsn),
 		&gorm.Config{

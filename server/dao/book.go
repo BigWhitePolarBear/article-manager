@@ -12,30 +12,30 @@ import (
 type Book struct {
 	ID        uint64         `gorm:"primaryKey"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
-	Name      string         `gorm:"type:varchar(100); index:,length:10"`
+	Name      string         `json:",omitempty" gorm:"type:varchar(100); index:,length:10"`
 }
 
 func (b *Book) BeforeSave(tx *gorm.DB) (err error) {
-	b.deleteFromCache()
+	go b.deleteFromCache()
 	return nil
 }
 
 func (b *Book) AfterSave(tx *gorm.DB) (err error) {
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		b.deleteFromCache()
 	}()
 	return nil
 }
 
 func (b *Book) BeforeUpdate(tx *gorm.DB) (err error) {
-	b.deleteFromCache()
+	go b.deleteFromCache()
 	return nil
 }
 
 func (b *Book) AfterUpdate(tx *gorm.DB) (err error) {
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		b.deleteFromCache()
 	}()
 	return nil
@@ -43,14 +43,14 @@ func (b *Book) AfterUpdate(tx *gorm.DB) (err error) {
 
 // AfterFind write into cache after search
 func (b *Book) AfterFind(tx *gorm.DB) (err error) {
-	b.saveIntoCache()
+	go b.saveIntoCache()
 
 	return nil
 }
 
 // AfterCreate write into cache after creation
 func (b *Book) AfterCreate(tx *gorm.DB) (err error) {
-	b.saveIntoCache()
+	go b.saveIntoCache()
 
 	return nil
 }
@@ -72,5 +72,11 @@ func (b *Book) saveIntoCache() {
 }
 
 func (b *Book) deleteFromCache() {
-	_ = BookCache.Delete(context.Background(), strconv.FormatUint(b.ID, 10))
+	retriedTimes := 0
+retry:
+	err := BookCache.Delete(context.Background(), strconv.FormatUint(b.ID, 10))
+	if err != nil && retriedTimes < 5 {
+		retriedTimes++
+		goto retry
+	}
 }

@@ -14,26 +14,26 @@ type WordToAuthor struct {
 }
 
 func (w *WordToAuthor) BeforeSave(tx *gorm.DB) (err error) {
-	w.deleteFromCache()
+	go w.deleteFromCache()
 	return nil
 }
 
 func (w *WordToAuthor) AfterSave(tx *gorm.DB) (err error) {
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		w.deleteFromCache()
 	}()
 	return nil
 }
 
 func (w *WordToAuthor) BeforeUpdate(tx *gorm.DB) (err error) {
-	w.deleteFromCache()
+	go w.deleteFromCache()
 	return nil
 }
 
 func (w *WordToAuthor) AfterUpdate(tx *gorm.DB) (err error) {
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		w.deleteFromCache()
 	}()
 	return nil
@@ -41,14 +41,14 @@ func (w *WordToAuthor) AfterUpdate(tx *gorm.DB) (err error) {
 
 // AfterFind write into cache after search
 func (w *WordToAuthor) AfterFind(tx *gorm.DB) (err error) {
-	w.saveIntoCache()
+	go w.saveIntoCache()
 
 	return nil
 }
 
 // AfterCreate write into cache after creation
 func (w *WordToAuthor) AfterCreate(tx *gorm.DB) (err error) {
-	w.saveIntoCache()
+	go w.saveIntoCache()
 
 	return nil
 }
@@ -65,5 +65,11 @@ func (w *WordToAuthor) saveIntoCache() {
 }
 
 func (w *WordToAuthor) deleteFromCache() {
-	_ = WordToAuthorCache.Delete(context.Background(), w.Word)
+	retriedTimes := 0
+retry:
+	err := WordToAuthorCache.Delete(context.Background(), w.Word)
+	if err != nil && retriedTimes < 5 {
+		retriedTimes++
+		goto retry
+	}
 }

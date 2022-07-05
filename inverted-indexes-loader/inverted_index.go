@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-type InvertedIndex map[uint64]int
+type InvertedIndex map[uint64]uint64
 
 func (s InvertedIndex) Add(num uint64) {
 	s[num]++
@@ -18,7 +18,7 @@ func (s InvertedIndex) AddSlice(nums []uint64) {
 	}
 }
 
-func (s InvertedIndex) Get(num uint64) (cnt int) {
+func (s InvertedIndex) Get(num uint64) (cnt uint64) {
 	cnt = s[num]
 	return
 }
@@ -34,7 +34,9 @@ func (s InvertedIndex) Serialize() string {
 	return builder.String()
 }
 
-func (s InvertedIndex) UnSerialize(str string) (err error) {
+func (s *InvertedIndex) UnSerialize(str string) (err error) {
+	*s = InvertedIndex{}
+
 	temp := strings.Fields(str)
 
 	for _, t := range temp {
@@ -43,11 +45,11 @@ func (s InvertedIndex) UnSerialize(str string) (err error) {
 		if err != nil {
 			return err
 		}
-		cnt, err := strconv.Atoi(_t[1])
+		cnt, err := strconv.ParseUint(_t[1], 16, 64)
 		if err != nil {
 			return err
 		}
-		s[id] = cnt
+		(*s)[id] = cnt
 	}
 
 	return nil

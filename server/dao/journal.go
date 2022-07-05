@@ -12,30 +12,30 @@ import (
 type Journal struct {
 	ID        uint64         `gorm:"primaryKey"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
-	Name      string         `gorm:"type:varchar(100); index:,length:10"`
+	Name      string         `json:",omitempty" gorm:"type:varchar(100); index:,length:10"`
 }
 
 func (j *Journal) BeforeSave(tx *gorm.DB) (err error) {
-	j.deleteFromCache()
+	go j.deleteFromCache()
 	return nil
 }
 
 func (j *Journal) AfterSave(tx *gorm.DB) (err error) {
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		j.deleteFromCache()
 	}()
 	return nil
 }
 
 func (j *Journal) BeforeUpdate(tx *gorm.DB) (err error) {
-	j.deleteFromCache()
+	go j.deleteFromCache()
 	return nil
 }
 
 func (j *Journal) AfterUpdate(tx *gorm.DB) (err error) {
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		j.deleteFromCache()
 	}()
 	return nil
@@ -43,14 +43,14 @@ func (j *Journal) AfterUpdate(tx *gorm.DB) (err error) {
 
 // AfterFind write into cache after search
 func (j *Journal) AfterFind(tx *gorm.DB) (err error) {
-	j.saveIntoCache()
+	go j.saveIntoCache()
 
 	return nil
 }
 
 // AfterCreate write into cache after creation
 func (j *Journal) AfterCreate(tx *gorm.DB) (err error) {
-	j.saveIntoCache()
+	go j.saveIntoCache()
 
 	return nil
 }
@@ -72,5 +72,11 @@ func (j *Journal) saveIntoCache() {
 }
 
 func (j *Journal) deleteFromCache() {
-	_ = JournalCache.Delete(context.Background(), strconv.FormatUint(j.ID, 10))
+	retriedTimes := 0
+retry:
+	err := JournalCache.Delete(context.Background(), strconv.FormatUint(j.ID, 10))
+	if err != nil && retriedTimes < 5 {
+		retriedTimes++
+		goto retry
+	}
 }

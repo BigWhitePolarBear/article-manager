@@ -16,10 +16,10 @@ func main() {
 	spellChecker.SetDepth(2)
 	spellChecker.Train(SampleEnglish())
 
-	wg.Add(1)
+	wg.Add(2)
 
 	go articleLoader()
-	// go authorLoader()
+	go authorLoader()
 
 	wg.Wait()
 }

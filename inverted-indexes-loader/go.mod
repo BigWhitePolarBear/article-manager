@@ -1,4 +1,4 @@
-module inverted-indexes-loader
+module inverted-IDs-loader
 
 go 1.18
 

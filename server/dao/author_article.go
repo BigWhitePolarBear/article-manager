@@ -14,26 +14,26 @@ type AuthorToArticle struct {
 }
 
 func (a *AuthorToArticle) BeforeSave(tx *gorm.DB) (err error) {
-	a.deleteFromCache()
+	go a.deleteFromCache()
 	return nil
 }
 
 func (a *AuthorToArticle) AfterSave(tx *gorm.DB) (err error) {
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		a.deleteFromCache()
 	}()
 	return nil
 }
 
 func (a *AuthorToArticle) BeforeUpdate(tx *gorm.DB) (err error) {
-	a.deleteFromCache()
+	go a.deleteFromCache()
 	return nil
 }
 
 func (a *AuthorToArticle) AfterUpdate(tx *gorm.DB) (err error) {
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		a.deleteFromCache()
 	}()
 	return nil
@@ -41,14 +41,14 @@ func (a *AuthorToArticle) AfterUpdate(tx *gorm.DB) (err error) {
 
 // AfterFind write into cache after search
 func (a *AuthorToArticle) AfterFind(tx *gorm.DB) (err error) {
-	a.saveIntoCache()
+	go a.saveIntoCache()
 
 	return nil
 }
 
 // AfterCreate write into cache after creation
 func (a *AuthorToArticle) AfterCreate(tx *gorm.DB) (err error) {
-	a.saveIntoCache()
+	go a.saveIntoCache()
 
 	return nil
 }
@@ -67,5 +67,11 @@ func (a *AuthorToArticle) saveIntoCache() {
 }
 
 func (a *AuthorToArticle) deleteFromCache() {
-	_ = AuthorToArticleRDB.Del(context.Background(), strconv.FormatUint(a.AuthorID, 10))
+	retriedTimes := 0
+retry:
+	err := AuthorToArticleRDB.Del(context.Background(), strconv.FormatUint(a.AuthorID, 10))
+	if err != nil && retriedTimes < 5 {
+		retriedTimes++
+		goto retry
+	}
 }

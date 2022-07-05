@@ -13,39 +13,39 @@ import (
 type Article struct {
 	ID        uint64         `gorm:"primaryKey"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
-	Title     string         `gorm:"type:varchar(1500) not null"`
+	Title     string         `json:",omitempty" gorm:"type:varchar(1500) not null"`
 	Authors   []string       `json:",omitempty" gorm:"-"`
-	Book      Book           `json:",omitempty"`
-	BookID    *uint64        `json:"-"`
-	Journal   Journal        `json:",omitempty"`
-	JournalID *uint64        `json:"-"`
-	Volume    string         `json:",omitempty" gorm:"type:varchar(50)"`
-	Pages     string         `json:",omitempty" gorm:"type:varchar(50)"`
-	Year      *uint16        `json:",omitempty"`
-	EE        string         `json:",omitempty" gorm:"type:varchar(500)"`
+	Book      Book
+	BookID    *uint64 `json:"-"`
+	Journal   Journal
+	JournalID *uint64 `json:"-"`
+	Volume    string  `json:",omitempty" gorm:"type:varchar(50)"`
+	Pages     string  `json:",omitempty" gorm:"type:varchar(50)"`
+	Year      *uint16 `json:",omitempty"`
+	EE        string  `json:",omitempty" gorm:"type:varchar(500)"`
 }
 
 func (a *Article) BeforeSave(tx *gorm.DB) (err error) {
-	a.deleteFromCache()
+	go a.deleteFromCache()
 	return nil
 }
 
 func (a *Article) AfterSave(tx *gorm.DB) (err error) {
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		a.deleteFromCache()
 	}()
 	return nil
 }
 
 func (a *Article) BeforeUpdate(tx *gorm.DB) (err error) {
-	a.deleteFromCache()
+	go a.deleteFromCache()
 	return nil
 }
 
 func (a *Article) AfterUpdate(tx *gorm.DB) (err error) {
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		a.deleteFromCache()
 	}()
 	return nil
@@ -53,14 +53,14 @@ func (a *Article) AfterUpdate(tx *gorm.DB) (err error) {
 
 // AfterFind write into cache after search
 func (a *Article) AfterFind(tx *gorm.DB) (err error) {
-	a.saveIntoCache()
+	go a.saveIntoCache()
 
 	return nil
 }
 
 // AfterCreate write into cache after creation
 func (a *Article) AfterCreate(tx *gorm.DB) (err error) {
-	a.saveIntoCache()
+	go a.saveIntoCache()
 
 	atomic.AddInt64(&AuthorCnt, 1)
 
@@ -68,14 +68,27 @@ func (a *Article) AfterCreate(tx *gorm.DB) (err error) {
 }
 
 func (a *Article) saveIntoCache() {
-	jsonA, err := json.Marshal(*a)
+	sID := strconv.FormatUint(a.ID, 10)
+
+	article := *a
+	article.Title = ""
+	jsonA, err := json.Marshal(article)
 	if err != nil {
 		log.Println("dao/article.go saveIntoCache error:", err)
 	}
 
 	err = ArticleCache.Set(&cache.Item{
-		Key:   strconv.FormatUint(a.ID, 10),
+		Key:   sID,
 		Value: jsonA,
+		TTL:   time.Minute,
+	})
+	if err != nil {
+		log.Println("dao/article.go saveIntoCache error:", err)
+	}
+
+	err = TitleCache.Set(&cache.Item{
+		Key:   sID,
+		Value: a.Title,
 		TTL:   time.Minute,
 	})
 	if err != nil {
@@ -84,5 +97,19 @@ func (a *Article) saveIntoCache() {
 }
 
 func (a *Article) deleteFromCache() {
-	_ = ArticleCache.Delete(context.Background(), strconv.FormatUint(a.ID, 10))
+	sID := strconv.FormatUint(a.ID, 10)
+
+	retriedTimes1, retriedTimes2 := 0, 0
+retry1:
+	err := ArticleCache.Delete(context.Background(), sID)
+	if err != nil && retriedTimes1 < 5 {
+		retriedTimes1++
+		goto retry1
+	}
+retry2:
+	err = TitleCache.Delete(context.Background(), sID)
+	if err != nil && retriedTimes2 < 5 {
+		retriedTimes2++
+		goto retry2
+	}
 }
