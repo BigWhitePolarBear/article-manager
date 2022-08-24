@@ -16,9 +16,9 @@ type Article struct {
 	Title     string         `json:",omitempty" gorm:"type:varchar(1500) not null"`
 	Authors   []string       `json:",omitempty" gorm:"-"`
 	Book      Book
-	BookID    *uint64 `json:"-"`
+	BookID    *uint64
 	Journal   Journal
-	JournalID *uint64 `json:"-"`
+	JournalID *uint64
 	Volume    string  `json:",omitempty" gorm:"type:varchar(50)"`
 	Pages     string  `json:",omitempty" gorm:"type:varchar(50)"`
 	Year      *uint16 `json:",omitempty"`
@@ -71,22 +71,27 @@ func (a *Article) saveIntoCache() {
 	sID := strconv.FormatUint(a.ID, 10)
 
 	article := *a
-	article.Title = ""
-	jsonA, err := json.Marshal(article)
-	if err != nil {
-		log.Println("dao/article.go saveIntoCache error:", err)
+
+	// Retrieved all from mysql.
+	if len(a.Authors) > 0 {
+		article.Title = ""
+		jsonA, err := json.Marshal(article)
+		if err != nil {
+			log.Println("dao/article.go saveIntoCache error:", err)
+		}
+
+		err = ArticleCache.Set(&cache.Item{
+			Key:   sID,
+			Value: jsonA,
+			TTL:   time.Minute,
+		})
+		if err != nil {
+			log.Println("dao/article.go saveIntoCache error:", err)
+		}
 	}
 
-	err = ArticleCache.Set(&cache.Item{
-		Key:   sID,
-		Value: jsonA,
-		TTL:   time.Minute,
-	})
-	if err != nil {
-		log.Println("dao/article.go saveIntoCache error:", err)
-	}
-
-	err = TitleCache.Set(&cache.Item{
+	// Only retrieved title.
+	err := TitleCache.Set(&cache.Item{
 		Key:   sID,
 		Value: a.Title,
 		TTL:   time.Minute,

@@ -18,7 +18,9 @@ var (
 	ArticleWordCntCache *cache.Cache
 	AuthorWordCntCache  *cache.Cache
 
-	ArticleResRDB *redis.Client
+	ArticleResRDB   *redis.Client
+	AuthorResRDB    *redis.Client
+	TopAuthorResRDB *redis.Client
 
 	ArticleToAuthorRDB *redis.Client
 	AuthorToArticleRDB *redis.Client
@@ -37,6 +39,8 @@ const (
 	numAuthorWordCntRDB
 
 	numArticleResRDB
+	numAuthorResRDB
+	numTopAuthorResRDB
 
 	numArticleToAuthorRDB
 	numAuthorToArticleRDB
@@ -147,6 +151,20 @@ func init() {
 		MasterName:    "mymaster",
 		SentinelAddrs: []string{":17000", ":17001", ":17002"},
 		DB:            numArticleResRDB,
+		Password:      "zxc05020519",
+	})
+
+	AuthorResRDB = redis.NewFailoverClient(&redis.FailoverOptions{
+		MasterName:    "mymaster",
+		SentinelAddrs: []string{":17000", ":17001", ":17002"},
+		DB:            numAuthorResRDB,
+		Password:      "zxc05020519",
+	})
+
+	TopAuthorResRDB = redis.NewFailoverClient(&redis.FailoverOptions{
+		MasterName:    "mymaster",
+		SentinelAddrs: []string{":17000", ":17001", ":17002"},
+		DB:            numTopAuthorResRDB,
 		Password:      "zxc05020519",
 	})
 

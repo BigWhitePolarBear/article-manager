@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"golang.org/x/sync/singleflight"
 	"log"
 	"server/dao"
 	"sort"
@@ -11,24 +13,45 @@ import (
 	"time"
 )
 
+var (
+	articleGroup singleflight.Group
+	titleGroup   singleflight.Group
+	bookGroup    singleflight.Group
+	journalGroup singleflight.Group
+)
+
 func getArticle(id uint64, admin bool) (article dao.Article, ok bool) {
+	sID := strconv.FormatUint(id, 10)
+
 	var jsonArticle []byte
-	err := dao.ArticleCache.Get(context.Background(), strconv.FormatUint(id, 10), &jsonArticle)
+	err := dao.ArticleCache.Get(context.Background(), sID, &jsonArticle)
 	if err == nil {
 		// got from cache
 		err = json.Unmarshal(jsonArticle, &article)
 		if err != nil {
 			log.Println("service/article.go getArticle error:", err)
-			ok = false
+			return article, false
 		}
 		article.Title = getTitle(id)
 	} else {
 		// cache missed
-		err = dao.DB.Model(&dao.Article{}).Where("id = ?", id).Find(&article).Error
+		_article, _err, _ := articleGroup.Do(sID, func() (interface{}, error) {
+			go func() {
+				time.Sleep(200 * time.Millisecond)
+				articleGroup.Forget(sID)
+			}()
+
+			_article := dao.Article{}
+			err = dao.DB.Model(&dao.Article{}).Where("id = ?", id).Find(&_article).Error
+			return _article, err
+		})
+		err = _err
 		if err != nil {
 			log.Println("service/article.go getArticle error:", err)
-			ok = false
+			return article, false
 		}
+
+		article = _article.(dao.Article)
 	}
 
 	authorIDs := getArticleAuthor(id)
@@ -58,54 +81,102 @@ func getArticle(id uint64, admin bool) (article dao.Article, ok bool) {
 }
 
 func getTitle(id uint64) (title string) {
-	err := dao.TitleCache.Get(context.Background(), strconv.FormatUint(id, 10), &title)
+	sID := strconv.FormatUint(id, 10)
+
+	err := dao.TitleCache.Get(context.Background(), sID, &title)
 	if err != nil {
-		article := dao.Article{}
-		err = dao.DB.Model(&dao.Article{ID: id}).Where("id = ?", id).
-			Select("id", "title").Find(&article).Error
+		_title, _err, _ := titleGroup.Do(sID, func() (interface{}, error) {
+			go func() {
+				time.Sleep(200 * time.Millisecond)
+				articleGroup.Forget(sID)
+			}()
+
+			_article := dao.Article{}
+			err = dao.DB.Model(&dao.Article{ID: id}).Where("id = ?", id).
+				Select("id", "title").Find(&_article).Error
+			return _article.Title, err
+		})
+		err = _err
 		if err != nil {
 			log.Println("service/article.go getTitle error:", err)
+			return
 		}
+
+		title = _title.(string)
 	}
 
 	return
 }
 
 func getBook(id uint64) (book dao.Book) {
+	sID := strconv.FormatUint(id, 10)
+
 	var jsonBook []byte
-	err := dao.BookCache.Get(context.Background(), strconv.FormatUint(id, 10), &jsonBook)
+	err := dao.BookCache.Get(context.Background(), sID, &jsonBook)
 	if err == nil {
 		// got from cache
 		err = json.Unmarshal(jsonBook, &book)
 		if err != nil {
 			log.Println("service/article.go getBook error:", err)
+			return
 		}
 	} else {
 		// cache missed
-		err = dao.DB.Model(&dao.Book{}).Where("id = ?", id).Find(&book).Error
+		_book, _err, _ := bookGroup.Do(sID, func() (interface{}, error) {
+			go func() {
+				time.Sleep(200 * time.Millisecond)
+				bookGroup.Forget(sID)
+			}()
+
+			_book := dao.Book{}
+			err = dao.DB.Model(&dao.Book{ID: id}).Where("id = ?", id).
+				Select("id", "name").Find(&_book).Error
+			return _book, err
+		})
+		err = _err
 		if err != nil {
 			log.Println("service/article.go getBook error:", err)
+			return
 		}
+
+		book = _book.(dao.Book)
 	}
 
 	return
 }
 
 func getJournal(id uint64) (journal dao.Journal) {
+	sID := strconv.FormatUint(id, 10)
+
 	var jsonJournal []byte
-	err := dao.JournalCache.Get(context.Background(), strconv.FormatUint(id, 10), &jsonJournal)
+	err := dao.JournalCache.Get(context.Background(), sID, &jsonJournal)
 	if err == nil {
 		// got from cache
 		err = json.Unmarshal(jsonJournal, &journal)
 		if err != nil {
 			log.Println("service/article.go getJournal error:", err)
+			return
 		}
 	} else {
 		// cache missed
-		err = dao.DB.Model(&dao.Journal{}).Where("id = ?", id).Find(&journal).Error
+		_journal, _err, _ := journalGroup.Do(sID, func() (interface{}, error) {
+			go func() {
+				time.Sleep(200 * time.Millisecond)
+				journalGroup.Forget(sID)
+			}()
+
+			_journal := dao.Journal{}
+			err = dao.DB.Model(&dao.Journal{ID: id}).Where("id = ?", id).
+				Select("id", "name").Find(&_journal).Error
+			return _journal, err
+		})
+		err = _err
 		if err != nil {
 			log.Println("service/article.go getJournal error:", err)
+			return
 		}
+
+		journal = _journal.(dao.Journal)
 	}
 
 	return
@@ -176,9 +247,14 @@ func cacheArticleRes(titleWords, authorWords, notWords []string, indexScores []I
 			}
 		}
 
-		err := dao.ArticleResRDB.Expire(context.Background(), key, time.Minute).Err()
-		if err != nil {
-			log.Println("service/article.go cacheArticleRes error:", err)
+		// Retry 5 times.
+		var expireErr error
+		expireErr = errors.New("")
+		for i := 0; expireErr != nil && i < 5; i++ {
+			expireErr = dao.ArticleResRDB.Expire(context.Background(), key, time.Minute).Err()
+		}
+		if expireErr != nil {
+			log.Println("service/article.go cacheArticleRes error:", expireErr)
 		}
 	}
 

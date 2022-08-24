@@ -10,6 +10,8 @@ func LoginMidWare() gin.HandlerFunc {
 }
 
 func AdminMark(c *gin.Context) {
+	if c.Keys == nil {
+		c.Keys = make(map[string]interface{})
+	}
 	c.Keys["admin"] = struct{}{}
-	c.Next()
 }

@@ -1,11 +1,14 @@
 package service
 
 import (
+	"context"
 	"errors"
+	"log"
 	"server/dao"
 	"sort"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type QueryType uint8
@@ -23,13 +26,13 @@ type IndexScore struct {
 }
 
 func SearchArticle(queries map[QueryType]string, admin bool) (articles []dao.Article, err error) {
-	invertedIndexes := make([]dao.InvertedIndex, 0)
-
 	// page query got default value 1.
 	page, err := strconv.Atoi(queries[PageQuery])
 	if err != nil {
 		return nil, errors.New("invalid page")
 	}
+
+	invertedIndexes := make([]dao.InvertedIndex, 0)
 
 	titleText := queries[TitleQuery]
 	titleWords := queryTextToWord(titleText)
@@ -141,39 +144,133 @@ func SearchArticle(queries map[QueryType]string, admin bool) (articles []dao.Art
 	return
 }
 
-//func GetAuthor(name string, limit, offset int) ([]Author, error) {
-//	searchSQL := authorsTable.Limit(limit).Offset(offset).Where("name = ?", name)
-//	_results := []dao.Author{}
-//	err := searchSQL.Find(&_results).Error
-//
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	results := make([]Author, 0, len(_results))
-//
-//	// Turn work id to work title.
-//	for _, _result := range _results {
-//		worksBuilder := strings.Builder{}
-//		workIDs := strings.Fields(_result.Articles)
-//		for _, workID := range workIDs {
-//			var title string
-//			worksTable.Where("id = ?", workID).Select("title").Find(&title)
-//			if worksBuilder.Len() != 0 {
-//				worksBuilder.WriteString(", ")
-//			}
-//			worksBuilder.WriteString(title)
-//		}
-//		results = append(results, Author{_result.Name, worksBuilder.String(), _result.ArticleCount})
-//	}
-//	return results, nil
-//}
-//
-//func GetTopAuthor(limit, offset int) (*[]Author, error) {
-//	results := make([]Author, limit)
-//	err := authorsTable.Select("name", "work_count").Order("work_count desc").Limit(limit).Offset(offset).Find(&results).Error
-//	if err != nil {
-//		return nil, err
-//	}
-//	return &results, nil
-//}
+func SearchAuthor(name, _page string, admin bool) (authors []dao.Author, err error) {
+	// page query got default value 1.
+	page, err := strconv.Atoi(_page)
+	if err != nil {
+		return nil, errors.New("invalid page")
+	}
+
+	invertedIndexes := make([]dao.InvertedIndex, 0)
+
+	nameWords := queryTextToWord(name)
+
+	// Try to get from cache.
+	authors, ok := getCachedAuthorRes(nameWords, page, admin)
+	if ok {
+		return
+	}
+
+	// Get inverted-indexes by title queries.
+	invertedIndexes = getInvertedIndexes(nameWords, word2author)
+	if 2*len(nameWords) < len(invertedIndexes) {
+		return nil, errors.New("no match records for your name queries")
+	}
+
+	authorIndexes, err := dao.Intersection(invertedIndexes)
+	if err != nil {
+		return nil, err
+	}
+
+	indexScores := make([]IndexScore, len(authorIndexes))
+
+	wg := sync.WaitGroup{}
+	wg.Add(NumCpu)
+	Len := len(indexScores)
+	partialLen := (Len + NumCpu - 1) / NumCpu
+	for i := 0; i < NumCpu; i++ {
+		go func(j int) {
+			defer wg.Done()
+			t := j + partialLen
+			for ; j < t; j++ {
+				indexScores[j].ID = authorIndexes[j]
+				indexScores[j].Score = bm25(authorIndexes[j], invertedIndexes, word2author)
+			}
+		}(i * partialLen)
+	}
+	wg.Wait()
+
+	// higher score first
+	sort.Slice(indexScores, func(i, j int) bool {
+		return indexScores[i].Score > indexScores[j].Score
+	})
+
+	// Create a goroutine to cache the results.
+	go cacheAuthorRes(nameWords, indexScores)
+
+	for i := (page - 1) * 50; i < len(indexScores) && i < page*50; i++ {
+		author, ok := getAuthor(indexScores[i].ID, admin)
+		if ok {
+			authors = append(authors, author)
+		}
+	}
+
+	return
+}
+
+func GetTopAuthor(page uint64, admin bool) (authors []dao.Author, err error) {
+	if page*10 > uint64(dao.AuthorCnt) {
+		return nil, errors.New("there are no so many authors")
+	}
+
+	sPage := strconv.FormatUint(page, 10)
+
+	authors = make([]dao.Author, 0, 10)
+
+	// Try to get from cache.
+	IDs := dao.TopAuthorResRDB.LRange(context.Background(), sPage, 0, -1).Val()
+	if len(IDs) > 0 {
+		for _, _id := range IDs {
+			id, err := strconv.ParseUint(_id, 10, 64)
+			if err != nil {
+				log.Println("service/get.go GetTopAuthor error:", err)
+				continue
+			}
+			author, ok := getAuthor(id, admin)
+			if !ok {
+				continue
+			}
+			authors = append(authors, author)
+		}
+		return authors, nil
+	}
+
+	// cache missed
+	offset := 10 * (page - 1)
+	limit := 10
+	err = dao.DB.Model(&dao.Author{}).Select("id").
+		Order("article_count desc").Offset(int(offset)).Limit(int(limit)).Find(&IDs).Error
+	if err != nil || len(IDs) == 0 {
+		log.Println("service/get.go GetTopAuthor error:", err)
+		return nil, nil
+	}
+
+	err = dao.TopAuthorResRDB.RPush(context.Background(), sPage, IDs).Err()
+	if err != nil {
+		log.Println("service/get.go GetTopAuthor error:", err)
+	}
+
+	var expireErr error
+	expireErr = errors.New("")
+	// Retry 5 times.
+	for i := 0; expireErr != nil && i < 5; i++ {
+		expireErr = dao.TopAuthorResRDB.Expire(context.Background(), sPage, time.Minute).Err()
+	}
+	if expireErr != nil {
+		log.Println("service/get.go GetTopAuthor error:", expireErr)
+	}
+
+	for _, _id := range IDs {
+		id, err := strconv.ParseUint(_id, 10, 64)
+		if err != nil {
+			log.Println("service/get.go GetTopAuthor error:", err)
+			continue
+		}
+		author, ok := getAuthor(id, admin)
+		if !ok {
+			continue
+		}
+		authors = append(authors, author)
+	}
+	return authors, nil
+}

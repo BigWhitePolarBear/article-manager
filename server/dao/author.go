@@ -14,6 +14,7 @@ type Author struct {
 	ID           uint64         `gorm:"primaryKey"`
 	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
 	Name         string         `json:",omitempty" gorm:"type:varchar(100) not null; index:,length:10"`
+	Articles     []string       `gorm:"-"`
 	ArticleCount uint16         `gorm:"index:,sort:desc"`
 }
 
@@ -62,7 +63,8 @@ func (a *Author) AfterCreate(tx *gorm.DB) (err error) {
 func (a *Author) saveIntoCache() {
 	sID := strconv.FormatUint(a.ID, 10)
 
-	if a.ArticleCount != 0 {
+	// Retrieved all from mysql.
+	if len(a.Articles) > 0 {
 		author := *a
 		author.Name = ""
 		jsonA, err := json.Marshal(author)
@@ -80,13 +82,16 @@ func (a *Author) saveIntoCache() {
 		}
 	}
 
-	err := NameCache.Set(&cache.Item{
-		Key:   sID,
-		Value: a.Name,
-		TTL:   time.Minute,
-	})
-	if err != nil {
-		log.Println("dao/author.go saveIntoCache error:", err)
+	// Only retrieved name from mysql.
+	if a.Name != "" {
+		err := NameCache.Set(&cache.Item{
+			Key:   sID,
+			Value: a.Name,
+			TTL:   time.Minute,
+		})
+		if err != nil {
+			log.Println("dao/author.go saveIntoCache error:", err)
+		}
 	}
 }
 

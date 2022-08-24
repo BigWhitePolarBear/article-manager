@@ -15,14 +15,16 @@ func main() {
 
 	// Retrieve
 	c.GET("/article/search", controller.SearchArticle)
-	//c.GET("/authors/search", controller.GetAuthor)
-	//c.GET("/authors/top/:page", controller.GetTopAuthor)
+	c.GET("/author/search", controller.SearchAuthor)
+	c.GET("/authors/top/:page", controller.GetTopAuthor)
 
 	// Use middleware to check if client has root privilege.
-	adminRoutine := c.Group("/admin", controller.LoginMidWare())
+	adminRoutine := c.Group("/admin", controller.AdminMark) //, controller.LoginMidWare())
 	{
 		// Root retrieve to get work id.
-		adminRoutine.GET("/papers/search", controller.AdminMark, controller.SearchArticle)
+		adminRoutine.GET("/article/search", controller.SearchArticle)
+		adminRoutine.GET("/author/search", controller.SearchAuthor)
+		adminRoutine.GET("/authors/top/:page", controller.GetTopAuthor)
 
 		//// Create
 		//adminRoutine.POST("/add", post.Work)
