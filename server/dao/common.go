@@ -15,8 +15,8 @@ type Variable struct {
 var (
 	json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-	ArticleCnt        int64
-	AuthorCnt         int64
+	ArticleCnt        uint64
+	AuthorCnt         uint64
 	ArticleAvgWordCnt float32
 	AuthorAvgWordCnt  float32
 
@@ -28,10 +28,18 @@ var (
 )
 
 func Init() {
-	DB.Model(&Article{}).Count(&ArticleCnt)
-	DB.Model(&Author{}).Count(&AuthorCnt)
+	err := DB.Model(&Variable{}).Where("`key` = ?", "ArticleCnt").
+		Select("value").Find(&ArticleCnt).Error
+	if err != nil {
+		panic(err)
+	}
+	err = DB.Model(&Variable{}).Where("`key` = ?", "AuthorCnt").
+		Select("value").Find(&AuthorCnt).Error
+	if err != nil {
+		panic(err)
+	}
 
-	err := DB.Model(&Variable{}).Where("`key` = ?", "ArticleAvgWordCnt").
+	err = DB.Model(&Variable{}).Where("`key` = ?", "ArticleAvgWordCnt").
 		Select("value").Find(&ArticleAvgWordCnt).Error
 	if err != nil {
 		panic(err)

@@ -55,7 +55,7 @@ func (a *Author) AfterFind(tx *gorm.DB) (err error) {
 func (a *Author) AfterCreate(tx *gorm.DB) (err error) {
 	go a.saveIntoCache()
 
-	atomic.AddInt64(&AuthorCnt, 1)
+	atomic.AddUint64(&AuthorCnt, 1)
 
 	return nil
 }

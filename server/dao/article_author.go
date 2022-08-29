@@ -13,12 +13,12 @@ type ArticleToAuthor struct {
 	AuthorID  uint64 `gorm:"primaryKey;autoIncrement:false"`
 }
 
-func (a *ArticleToAuthor) BeforeSave(tx *gorm.DB) (err error) {
+func (a *ArticleToAuthor) BeforeSave(tx *gorm.DB) error {
 	go a.deleteFromCache()
 	return nil
 }
 
-func (a *ArticleToAuthor) AfterSave(tx *gorm.DB) (err error) {
+func (a *ArticleToAuthor) AfterSave(tx *gorm.DB) error {
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		a.deleteFromCache()
@@ -26,12 +26,25 @@ func (a *ArticleToAuthor) AfterSave(tx *gorm.DB) (err error) {
 	return nil
 }
 
-func (a *ArticleToAuthor) BeforeUpdate(tx *gorm.DB) (err error) {
+func (a *ArticleToAuthor) BeforeUpdate(tx *gorm.DB) error {
 	go a.deleteFromCache()
 	return nil
 }
 
-func (a *ArticleToAuthor) AfterUpdate(tx *gorm.DB) (err error) {
+func (a *ArticleToAuthor) AfterUpdate(tx *gorm.DB) error {
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		a.deleteFromCache()
+	}()
+	return nil
+}
+
+func (a *ArticleToAuthor) BeforeDelete(tx *gorm.DB) error {
+	go a.deleteFromCache()
+	return nil
+}
+
+func (a *ArticleToAuthor) AfterDelete(tx *gorm.DB) error {
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		a.deleteFromCache()

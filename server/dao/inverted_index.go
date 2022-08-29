@@ -15,6 +15,10 @@ func (s InvertedIndex) Add(num uint64) {
 	s[num]++
 }
 
+func (s InvertedIndex) Del(num uint64) {
+	delete(s, num)
+}
+
 func (s InvertedIndex) AddSlice(nums []uint64) {
 	for _, num := range nums {
 		s.Add(num)

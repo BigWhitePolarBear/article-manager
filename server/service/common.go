@@ -32,7 +32,7 @@ func Init() {
 	spellChecker.Train(SampleEnglish())
 }
 
-func queryTextToWord(text string) (words []string) {
+func textToWord(text string) (words []string) {
 	if len(text) == 0 {
 		return
 	}

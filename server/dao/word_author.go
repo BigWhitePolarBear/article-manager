@@ -13,12 +13,12 @@ type WordToAuthor struct {
 	Indexes string `gorm:"type:longtext"`
 }
 
-func (w *WordToAuthor) BeforeSave(tx *gorm.DB) (err error) {
+func (w *WordToAuthor) BeforeSave(tx *gorm.DB) error {
 	go w.deleteFromCache()
 	return nil
 }
 
-func (w *WordToAuthor) AfterSave(tx *gorm.DB) (err error) {
+func (w *WordToAuthor) AfterSave(tx *gorm.DB) error {
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		w.deleteFromCache()
@@ -26,12 +26,25 @@ func (w *WordToAuthor) AfterSave(tx *gorm.DB) (err error) {
 	return nil
 }
 
-func (w *WordToAuthor) BeforeUpdate(tx *gorm.DB) (err error) {
+func (w *WordToAuthor) BeforeUpdate(tx *gorm.DB) error {
 	go w.deleteFromCache()
 	return nil
 }
 
-func (w *WordToAuthor) AfterUpdate(tx *gorm.DB) (err error) {
+func (w *WordToAuthor) AfterUpdate(tx *gorm.DB) error {
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		w.deleteFromCache()
+	}()
+	return nil
+}
+
+func (w *WordToAuthor) BeforeDelete(tx *gorm.DB) error {
+	go w.deleteFromCache()
+	return nil
+}
+
+func (w *WordToAuthor) AfterDelete(tx *gorm.DB) error {
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		w.deleteFromCache()
@@ -40,14 +53,14 @@ func (w *WordToAuthor) AfterUpdate(tx *gorm.DB) (err error) {
 }
 
 // AfterFind write into cache after search
-func (w *WordToAuthor) AfterFind(tx *gorm.DB) (err error) {
+func (w *WordToAuthor) AfterFind(tx *gorm.DB) error {
 	go w.saveIntoCache()
 
 	return nil
 }
 
 // AfterCreate write into cache after creation
-func (w *WordToAuthor) AfterCreate(tx *gorm.DB) (err error) {
+func (w *WordToAuthor) AfterCreate(tx *gorm.DB) error {
 	go w.saveIntoCache()
 
 	return nil

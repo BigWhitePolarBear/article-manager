@@ -35,11 +35,11 @@ func SearchArticle(queries map[QueryType]string, admin bool) (articles []dao.Art
 	invertedIndexes := make([]dao.InvertedIndex, 0)
 
 	titleText := queries[TitleQuery]
-	titleWords := queryTextToWord(titleText)
+	titleWords := textToWord(titleText)
 	authorText, authorTextOk := queries[AuthorQuery]
-	authorWords := queryTextToWord(authorText)
+	authorWords := textToWord(authorText)
 	notText, notTextOk := queries[NotQuery]
-	notWords := queryTextToWord(notText)
+	notWords := textToWord(notText)
 
 	// Try to get from cache.
 	articles, ok := getCachedArticleRes(titleWords, authorWords, notWords, page, admin)
@@ -153,7 +153,7 @@ func SearchAuthor(name, _page string, admin bool) (authors []dao.Author, err err
 
 	invertedIndexes := make([]dao.InvertedIndex, 0)
 
-	nameWords := queryTextToWord(name)
+	nameWords := textToWord(name)
 
 	// Try to get from cache.
 	authors, ok := getCachedAuthorRes(nameWords, page, admin)
@@ -208,14 +208,14 @@ func SearchAuthor(name, _page string, admin bool) (authors []dao.Author, err err
 	return
 }
 
-func GetTopAuthor(page uint64, admin bool) (authors []dao.Author, err error) {
+func GetTopAuthor(page uint64, admin bool) ([]dao.Author, error) {
 	if page*10 > uint64(dao.AuthorCnt) {
 		return nil, errors.New("there are no so many authors")
 	}
 
 	sPage := strconv.FormatUint(page, 10)
 
-	authors = make([]dao.Author, 0, 10)
+	authors := make([]dao.Author, 0, 10)
 
 	// Try to get from cache.
 	IDs := dao.TopAuthorResRDB.LRange(context.Background(), sPage, 0, -1).Val()
@@ -238,7 +238,7 @@ func GetTopAuthor(page uint64, admin bool) (authors []dao.Author, err error) {
 	// cache missed
 	offset := 10 * (page - 1)
 	limit := 10
-	err = dao.DB.Model(&dao.Author{}).Select("id").
+	err := dao.DB.Model(&dao.Author{}).Select("id").
 		Order("article_count desc").Offset(int(offset)).Limit(int(limit)).Find(&IDs).Error
 	if err != nil || len(IDs) == 0 {
 		log.Println("service/get.go GetTopAuthor error:", err)

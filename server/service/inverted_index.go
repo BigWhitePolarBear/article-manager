@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"log"
 	"math"
 	"server/dao"
@@ -17,21 +20,21 @@ const (
 )
 
 // Get all inverted-indexes of the words.
-func getInvertedIndexes(fields []string, choice IndexChoice) (invertedIndexes []dao.InvertedIndex) {
-	invertedIndexes = make([]dao.InvertedIndex, 0)
+func getInvertedIndexes(fields []string, choice IndexChoice) []dao.InvertedIndex {
+	invertedIndexes := make([]dao.InvertedIndex, 0)
 	for _, field := range fields {
 		invertedIndex := getInvertedIndex(field, choice)
 		invertedIndexes = append(invertedIndexes, invertedIndex)
 	}
-	return
+	return invertedIndexes
 }
 
-// Try to get from cache(check by bloom filter) before get from mysql.
-func getInvertedIndex(field string, choice IndexChoice) (invertedIndex dao.InvertedIndex) {
-	invertedIndex = dao.InvertedIndex{}
+// Try to get from cache(check by bloom filter) before get from mysql, return nil if there is an error.
+func getInvertedIndex(field string, choice IndexChoice) dao.InvertedIndex {
+	invertedIndex := dao.InvertedIndex{}
 	if choice == word2article {
 		if !dao.ArticleWordFilter.TestString(field) {
-			return
+			return nil
 		}
 
 		var _invertedIndex string
@@ -42,18 +45,20 @@ func getInvertedIndex(field string, choice IndexChoice) (invertedIndex dao.Inver
 			err = dao.DB.Model(&dao.WordToArticle{}).Where("word = ?", field).
 				Find(&wordToArticle).Error
 			if err != nil {
-				return
+				return nil
 			}
 			_invertedIndex = wordToArticle.Indexes
 		}
 		err = invertedIndex.UnSerialize(_invertedIndex)
 		if err != nil {
 			log.Println("service/inverted_index.go getInvertedIndex error:", err)
+			return nil
 		}
-		return
+		return invertedIndex
+
 	} else if choice == word2author {
 		if !dao.AuthorWordFilter.TestString(field) {
-			return
+			return nil
 		}
 
 		var _invertedIndex string
@@ -64,30 +69,141 @@ func getInvertedIndex(field string, choice IndexChoice) (invertedIndex dao.Inver
 			err = dao.DB.Model(&dao.WordToAuthor{}).Where("word = ?", field).
 				Find(&wordToAuthor).Error
 			if err != nil {
-				return
+				return nil
 			}
 			_invertedIndex = wordToAuthor.Indexes
 		}
 		err = invertedIndex.UnSerialize(_invertedIndex)
 		if err != nil {
 			log.Println("service/inverted_index.go getInvertedIndex error:", err)
+			return nil
 		}
-		return
+		return invertedIndex
+
 	} else if choice == author2article {
 		authorID, _ := strconv.ParseUint(field, 10, 64)
 		articleIDs := getAuthorArticle(authorID)
 		for _, articleId := range articleIDs {
 			invertedIndex.Add(articleId)
 		}
-		return
-	} else {
-		return
+		return invertedIndex
 	}
+
+	// Wrong choice.
+	return nil
+}
+
+// Get all inverted-indexes of the words directly from mysql with locks.
+func getInvertedIndexesForUpdate(tx *gorm.DB, fields []string, choice IndexChoice) ([]dao.InvertedIndex, error) {
+	invertedIndexes := make([]dao.InvertedIndex, 0)
+	for _, field := range fields {
+		invertedIndex, err := getInvertedIndexForUpdate(tx, field, choice)
+		if err != nil {
+			return nil, err
+		}
+		invertedIndexes = append(invertedIndexes, invertedIndex)
+	}
+	return invertedIndexes, nil
+}
+
+// Get inverted-index of the word directly from mysql with lock.
+func getInvertedIndexForUpdate(tx *gorm.DB, field string, choice IndexChoice) (dao.InvertedIndex, error) {
+	invertedIndex := dao.InvertedIndex{}
+	if choice == word2article {
+		if !dao.ArticleWordFilter.TestString(field) {
+			return invertedIndex, nil
+		}
+		wordToArticle := dao.WordToArticle{}
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Model(&dao.WordToArticle{}).
+			Where("word = ?", field).Find(&wordToArticle).Error
+		if err != nil {
+			return nil, err
+		}
+		err = invertedIndex.UnSerialize(wordToArticle.Indexes)
+		if err != nil {
+			return nil, err
+		}
+		return invertedIndex, nil
+
+	} else if choice == word2author {
+		if !dao.AuthorWordFilter.TestString(field) {
+			return invertedIndex, nil
+		}
+		wordToAuthor := dao.WordToAuthor{}
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Model(&dao.WordToAuthor{}).
+			Where("word = ?", field).Find(&wordToAuthor).Error
+		if err != nil {
+			return nil, err
+		}
+		err = invertedIndex.UnSerialize(wordToAuthor.Indexes)
+		if err != nil {
+			return nil, err
+		}
+		return invertedIndex, nil
+
+	} else if choice == author2article {
+		authorID, _ := strconv.ParseUint(field, 10, 64)
+		articleIDs := getAuthorArticle(authorID)
+		for _, articleId := range articleIDs {
+			invertedIndex.Add(articleId)
+		}
+		return invertedIndex, nil
+	}
+
+	// Wrong choice.
+	return nil, errors.New("wrong choice param in getInvertedIndexesForUpdate func")
+}
+
+// Save all inverted-indexes of the words.
+// Words should be promised to exist since they were got form getInvertedIndexForUpdate func.
+// Only support word2article and word2author.
+func saveInvertedIndexes(tx *gorm.DB, words []string, invertedIndexes []dao.InvertedIndex, choice IndexChoice) error {
+	for i := range words {
+		err := saveInvertedIndex(tx, words[i], invertedIndexes[i], choice)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Save the inverted-index of a word.
+// Word should be promised to exist since it was got form getInvertedIndexForUpdate func.
+// Only support word2article and word2author.
+func saveInvertedIndex(tx *gorm.DB, word string, invertedIndex dao.InvertedIndex, choice IndexChoice) error {
+	if choice == word2article {
+		if len(invertedIndex) == 0 {
+			err := tx.Delete(&dao.WordToArticle{Word: word}).Error
+			if err != nil {
+				return err
+			}
+		} else {
+			err := tx.Save(&dao.WordToArticle{Word: word, Indexes: invertedIndex.Serialize()}).Error
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	} else if choice == word2author {
+		if len(invertedIndex) == 0 {
+			err := tx.Delete(&dao.WordToAuthor{Word: word}).Error
+			if err != nil {
+				return err
+			}
+		} else {
+			err := tx.Save(&dao.WordToAuthor{Word: word, Indexes: invertedIndex.Serialize()}).Error
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return errors.New("no such choice")
 }
 
 func bm25(id uint64, invertedIndexes []dao.InvertedIndex, choice IndexChoice) (score float32) {
 	var (
-		totalCnt   int64
+		totalCnt   uint64
 		wordCnt    uint8
 		avgWordCnt float32
 		err        error

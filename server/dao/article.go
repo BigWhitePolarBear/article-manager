@@ -25,12 +25,12 @@ type Article struct {
 	EE        string  `json:",omitempty" gorm:"type:varchar(500)"`
 }
 
-func (a *Article) BeforeSave(tx *gorm.DB) (err error) {
+func (a *Article) BeforeSave(tx *gorm.DB) error {
 	go a.deleteFromCache()
 	return nil
 }
 
-func (a *Article) AfterSave(tx *gorm.DB) (err error) {
+func (a *Article) AfterSave(tx *gorm.DB) error {
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		a.deleteFromCache()
@@ -38,12 +38,25 @@ func (a *Article) AfterSave(tx *gorm.DB) (err error) {
 	return nil
 }
 
-func (a *Article) BeforeUpdate(tx *gorm.DB) (err error) {
+func (a *Article) BeforeUpdate(tx *gorm.DB) error {
 	go a.deleteFromCache()
 	return nil
 }
 
-func (a *Article) AfterUpdate(tx *gorm.DB) (err error) {
+func (a *Article) AfterUpdate(tx *gorm.DB) error {
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		a.deleteFromCache()
+	}()
+	return nil
+}
+
+func (a *Article) BeforeDelete(tx *gorm.DB) error {
+	go a.deleteFromCache()
+	return nil
+}
+
+func (a *Article) AfterDelete(tx *gorm.DB) error {
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		a.deleteFromCache()
@@ -52,17 +65,17 @@ func (a *Article) AfterUpdate(tx *gorm.DB) (err error) {
 }
 
 // AfterFind write into cache after search
-func (a *Article) AfterFind(tx *gorm.DB) (err error) {
+func (a *Article) AfterFind(tx *gorm.DB) error {
 	go a.saveIntoCache()
 
 	return nil
 }
 
 // AfterCreate write into cache after creation
-func (a *Article) AfterCreate(tx *gorm.DB) (err error) {
+func (a *Article) AfterCreate(tx *gorm.DB) error {
 	go a.saveIntoCache()
 
-	atomic.AddInt64(&AuthorCnt, 1)
+	atomic.AddUint64(&AuthorCnt, 1)
 
 	return nil
 }
