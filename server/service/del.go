@@ -9,7 +9,7 @@ import (
 func DelArticle(id uint64) (dao.Article, error) {
 	oldArticle := dao.Article{}
 
-	// Need to lock the data in transaction to prevent data race.
+	// Modify data in transaction.
 	tx := dao.DB.Begin()
 
 	// Lock global data.
@@ -63,13 +63,7 @@ func DelArticle(id uint64) (dao.Article, error) {
 		}
 
 		// Delete connection.
-		err = tx.Delete(&dao.ArticleToAuthor{ArticleID: id, AuthorID: authorID}).Error
-		if err != nil {
-			tx.Rollback()
-			dao.AuthorCnt, dao.AuthorAvgWordCnt = oldAuthorCnt, oldAuthorAvgWordCnt
-			return oldArticle, err
-		}
-		err = tx.Delete(&dao.AuthorToArticle{AuthorID: authorID, ArticleID: id}).Error
+		err = delConnection(tx, id, authorID)
 		if err != nil {
 			tx.Rollback()
 			dao.AuthorCnt, dao.AuthorAvgWordCnt = oldAuthorCnt, oldAuthorAvgWordCnt
@@ -106,7 +100,7 @@ func DelArticle(id uint64) (dao.Article, error) {
 	// Update global data.
 	oldArticleCnt, oldArticleAvgWordCnt := dao.ArticleCnt, dao.ArticleAvgWordCnt
 	dao.ArticleCnt--
-	dao.ArticleAvgWordCnt = (float32(dao.ArticleCnt) * dao.ArticleAvgWordCnt) - float32(len(titleWords))/
+	dao.ArticleAvgWordCnt = ((float32(dao.ArticleCnt) * dao.ArticleAvgWordCnt) - float32(len(titleWords))) /
 		float32(dao.ArticleCnt)
 
 	err = tx.Model(&dao.Variable{}).Where("`key` = ?", "ArticleCnt").
@@ -165,7 +159,7 @@ func delAuthor(tx *gorm.DB, id uint64) error {
 
 	// Update global data.
 	dao.AuthorCnt--
-	dao.AuthorAvgWordCnt = (float32(dao.AuthorCnt) * dao.AuthorAvgWordCnt) - float32(len(nameWords))/
+	dao.AuthorAvgWordCnt = ((float32(dao.AuthorCnt) * dao.AuthorAvgWordCnt) - float32(len(nameWords))) /
 		float32(dao.AuthorCnt-1)
 
 	err = tx.Model(&dao.Variable{}).Where("`key` = ?", "AuthorCnt").
@@ -175,6 +169,19 @@ func delAuthor(tx *gorm.DB, id uint64) error {
 	}
 	err = tx.Model(&dao.Variable{}).Where("`key` = ?", "AuthorAvgWordCnt").
 		Update("value", dao.AuthorAvgWordCnt).Error
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func delConnection(tx *gorm.DB, articleID, authorID uint64) error {
+	err := tx.Delete(&dao.ArticleToAuthor{ArticleID: articleID, AuthorID: authorID}).Error
+	if err != nil {
+		return err
+	}
+	err = tx.Delete(&dao.AuthorToArticle{AuthorID: authorID, ArticleID: articleID}).Error
 	if err != nil {
 		return err
 	}

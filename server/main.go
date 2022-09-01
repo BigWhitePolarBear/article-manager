@@ -31,8 +31,8 @@ func main() {
 		// Create
 		adminRoutine.POST("/create", controller.Post)
 		//
-		//// Update
-		//adminRoutine.PUT("/update", controller.UpdateArticle)
+		// Update
+		adminRoutine.PUT("/update", controller.Update)
 		//
 		// Delete
 		adminRoutine.DELETE("/delete", controller.Del)
